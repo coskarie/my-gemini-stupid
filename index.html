@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>블록 찾기: 전술 기동 온라인</title>
+    <title>블록 찾기: 디버그 모드</title>
     <style>
         body { font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; margin: 0; background: #f0f0f0; overflow: hidden; }
         #login-screen { position: fixed; inset: 0; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1000; }
@@ -31,7 +31,7 @@
 <body>
 
     <div id="login-screen">
-        <h1>전술 기동 블록 찾기</h1>
+        <h1>전술 기동 [디버그 모드]</h1>
         <div style="margin-bottom: 10px; display: flex; flex-direction: column; gap: 5px;">
             <input type="text" id="name-input" placeholder="이름 입력" style="padding: 10px; width: 200px;">
             <input type="number" id="room-input" placeholder="방 번호" style="padding: 10px; width: 200px;">
@@ -79,7 +79,6 @@
         let myName = "", myRoom = "", myUnits = [], isMyTurn = false;
         let gameStatus = "LOBBY", selectedUnitType = null, currentRotation = 0;
 
-        /* [수정] 파트너님이 제안하신 3x3 행렬 데이터 */
         const UNIT_DATA = {
             'ㄷ': [[1,1,0], [1,0,0], [1,1,0]],
             'L': [[1,0,0], [1,0,0], [1,1,0]],
@@ -118,16 +117,21 @@
 
         function rotateUnit() {
             currentRotation = (currentRotation + 90) % 360;
+            console.log(`[Rotation] 현재 각도: ${currentRotation}`);
             addGameLog("[알림] 회전: " + currentRotation + "도");
             if (selectedUnitType) showGhost(-1); 
         }
 
-        /* [수정 핵심] 클릭 지점이 무조건 행렬의 첫 번째 '1'에 오도록 좌표 계산 */
         function getRotatedCells(type, pivotIdx, rotation) {
+            if(!type) return [];
             const normalizedType = type.normalize('NFC');
             let matrix = null;
             for(let key in UNIT_DATA) { if(key.normalize('NFC') === normalizedType) { matrix = UNIT_DATA[key]; break; } }
-            if(!matrix) return [];
+            
+            if(!matrix) {
+                console.error(`[Calc Error] ${type}에 대한 UNIT_DATA를 찾을 수 없습니다.`);
+                return [];
+            }
 
             let rotated = matrix;
             const times = (rotation / 90) % 4;
@@ -138,7 +142,6 @@
                 rotated = newMat;
             }
 
-            // 회전된 행렬에서 '첫 번째 1'의 위치를 찾음 (앵커 포인트)
             let anchorR = -1, anchorC = -1;
             for(let r=0; r<rotated.length; r++) {
                 for(let c=0; c<rotated[0].length; c++) {
@@ -162,32 +165,40 @@
         }
 
         function placeOrPickUnit(idx) {
+            console.log(`[Click] 클릭된 인덱스: ${idx}, 선택된 유닛: ${selectedUnitType}`);
             if(gameStatus !== 'PLACING' && gameStatus !== 'MOVING') return;
+
             const uIdx = myUnits.findIndex(u => u.cells.includes(idx));
             if (uIdx !== -1) {
+                console.log(`[Pick] 유닛 회수 시도`);
                 const u = myUnits[uIdx];
                 if (u.isHit) return alert("피격된 유닛 고정!");
                 myUnits.splice(uIdx, 1); inventory[u.type]++;
                 selectedUnitType = u.type; renderInventory(); renderMyGrid();
                 return;
             }
-            if(!selectedUnitType || inventory[selectedUnitType] <= 0) return;
+
+            if(!selectedUnitType) {
+                console.warn(`[Place Skip] 선택된 유닛이 없습니다.`);
+                return;
+            }
+
             const cells = getRotatedCells(selectedUnitType, idx, currentRotation);
-            if(cells.includes(-1) || cells.some(c => myUnits.some(u => u.cells.includes(c)))) return;
+            console.log(`[Calc Result] 계산된 좌표들:`, cells);
+
+            const isOutOfBounds = cells.includes(-1);
+            const isOverlapping = cells.some(c => myUnits.some(u => u.cells.includes(c)));
+
+            if(isOutOfBounds || isOverlapping) {
+                console.error(`[Placement Fail] 사유 - 경계밖: ${isOutOfBounds}, 겹침: ${isOverlapping}`);
+                return;
+            }
+
+            console.log(`[Placement Success] ${selectedUnitType} 배치 완료`);
             myUnits.push({ type: selectedUnitType, cells: cells, isHit: false });
             inventory[selectedUnitType]--;
             if(inventory[selectedUnitType] <= 0) selectedUnitType = null;
             renderInventory(); renderMyGrid();
-        }
-
-        function renderMyGrid() {
-            const cells = document.getElementById('my-grid').children;
-            for(let i=0; i<200; i++) { cells[i].className = ''; cells[i].style.opacity = "1"; }
-            myUnits.forEach(u => { u.cells.forEach(c => {
-                cells[c].classList.add('my-unit');
-                if (u.isHit) cells[c].style.opacity = "0.6";
-                if (u.hitCells && u.hitCells.includes(c)) cells[c].classList.add('hit-unit');
-            });});
         }
 
         let lastIdx = -1;
@@ -208,7 +219,11 @@
                 const b = document.createElement('button');
                 b.className = 'unit-btn' + (selectedUnitType === t ? ' active' : '');
                 b.innerText = `${t}(${inventory[t]})`;
-                b.onclick = () => { selectedUnitType = t; renderInventory(); };
+                b.onclick = () => { 
+                    console.log(`[Inventory] 유닛 선택: ${t}`);
+                    selectedUnitType = t; 
+                    renderInventory(); 
+                };
                 inv.appendChild(b);
             }}
         }
