@@ -39,7 +39,7 @@ io.on('connection', (socket) => {
         io.to(roomCode).emit('systemMsg', `${userName}님이 입장하셨습니다.`);
     });
 
-    // 2. 역할 변경
+    // 2. 역할 변경 (플레이어 <-> 관전자)
     socket.on('changeRole', (role) => {
         if (!currentRoom) return;
         const room = rooms[currentRoom];
@@ -67,35 +67,41 @@ io.on('connection', (socket) => {
         updateRoomInfo(currentRoom);
     });
 
-    // 3. 준비 완료 토글
+    // 3. 준비 완료 버튼 토글
     socket.on('toggleReady', () => {
         const room = rooms[currentRoom];
         if (!room || room.gameState !== 'LOBBY') return;
-        const p = room.players.find(p => p.id === socket.id);
-        if (p) {
-            p.isReady = !p.isReady;
+        
+        const player = room.players.find(p => p.id === socket.id);
+        if (player) {
+            player.isReady = !player.isReady;
             updateRoomInfo(currentRoom);
         }
     });
 
-    // 4. 게임 시작
+    // 4. 게임 시작 버튼
     socket.on('startGame', () => {
         const room = rooms[currentRoom];
-        if (room && room.players.length === 2 && room.players.every(p => p.isReady)) {
+        if (!room) return;
+        
+        if (room.players.length === 2 && room.players.every(p => p.isReady)) {
             room.gameState = 'PLACING';
             io.to(currentRoom).emit('startPlacing');
             updateRoomInfo(currentRoom);
+        } else {
+            socket.emit('systemMsg', '모든 플레이어가 준비되어야 시작할 수 있습니다.');
         }
     });
 
-    // 5. 배치 확정
+    // 5. 배치 및 전술 기동 확정 로직
     socket.on('finishPlacing', (units) => {
         const room = rooms[currentRoom];
         if (!room) return;
-        const p = room.players.find(p => p.id === socket.id);
-        if (p) {
-            p.units = units;
-            p.placed = true;
+        const player = room.players.find(p => p.id === socket.id);
+        
+        if (player) {
+            player.units = units;
+            player.placed = true;
         }
 
         if (room.players.length === 2 && room.players.every(p => p.placed)) {
@@ -104,16 +110,21 @@ io.on('connection', (socket) => {
             room.players.forEach(p => p.placed = false);
 
             if (prevState === 'PLACING') {
-                room.turn = room.players[Math.floor(Math.random() * 2)].id;
+                const turnIndex = Math.floor(Math.random() * 2);
+                room.turn = room.players[turnIndex].id;
                 io.to(currentRoom).emit('gameStart', { turn: room.turn });
+                io.to(currentRoom).emit('systemMsg', "전투 시작! 선공을 확인하세요.");
             } else {
                 io.to(currentRoom).emit('gameStart', { turn: room.turn });
+                io.to(currentRoom).emit('systemMsg', "전술 기동 완료! 전투를 재개합니다.");
             }
             updateRoomInfo(currentRoom);
+        } else {
+            socket.emit('systemMsg', "상대방의 작전 완료를 기다리는 중입니다...");
         }
     });
 
-    // 6. 공격
+    // 6. 공격 로직
     socket.on('attack', (index) => {
         const room = rooms[currentRoom];
         if (!room || room.gameState !== 'PLAYING' || room.turn !== socket.id) return;
@@ -143,22 +154,32 @@ io.on('connection', (socket) => {
             room.turn = opponent.id;
             room.phraseCount++;
             io.to(currentRoom).emit('attackResult', { attacker: socket.id, index, hit: false, nextTurn: room.turn });
+
             if (room.phraseCount > 0 && room.phraseCount % 5 === 0) {
                 room.gameState = 'MOVING';
                 io.to(currentRoom).emit('startMoving');
+                io.to(currentRoom).emit('systemMsg', "⚠️ 5프레이즈 도달! 피격되지 않은 유닛을 재배치하세요.");
             }
         }
     });
 
+    // 7. 다시하기 로직
     socket.on('requestRematch', () => {
         const room = rooms[currentRoom];
         if (!room || room.gameState !== 'ENDED') return;
+
         room.gameState = 'LOBBY';
         room.phraseCount = 0;
         room.turn = null;
-        room.players.forEach(p => { p.isReady = false; p.units = []; p.placed = false; });
+        room.players.forEach(p => {
+            p.isReady = false;
+            p.units = [];
+            p.placed = false;
+        });
+
         io.to(currentRoom).emit('rematchStarted');
         updateRoomInfo(currentRoom);
+        io.to(currentRoom).emit('systemMsg', "방이 초기화되었습니다. 다시 준비해주세요!");
     });
 
     socket.on('sendChat', (msg) => {
@@ -174,9 +195,11 @@ io.on('connection', (socket) => {
     });
 
     function updateRoomInfo(roomCode) {
-        if (rooms[roomCode]) io.to(roomCode).emit('roomData', rooms[roomCode]);
+        if (rooms[roomCode]) {
+            io.to(roomCode).emit('roomData', rooms[roomCode]);
+        }
     }
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, () => console.log(`Tactical Engine Active on port ${PORT}`));
