@@ -79,15 +79,15 @@
         let myName = "", myRoom = "", myUnits = [], isMyTurn = false;
         let gameStatus = "LOBBY", selectedUnitType = null, currentRotation = 0;
 
-        // [안전장치 1] 모든 유닛을 3x3 또는 5x5로 규격화 (I블록은 5x5가 안전)
+        /* [핵심] 파트너님의 이론대로 0은 무시하고 1만 계산하는 3x3 매트릭스 정의 */
         const UNIT_DATA = {
             'ㄷ': [[1,1,0], [1,0,0], [1,1,0]],
             'L': [[1,0,0], [1,0,0], [1,1,0]],
             'T': [[1,1,1], [0,1,0], [0,0,0]],
-            'ㅗ': [[0,1,0], [1,1,1], [0,0,0]],
-            'I': [[0,0,1,0,0], [0,0,1,0,0], [0,0,1,0,0], [0,0,1,0,0], [0,0,0,0,0]],
-            '1x1': [[0,0,0], [0,1,0], [0,0,0]],
-            '1x2': [[0,0,0], [0,1,1], [0,0,0]]
+            'ㅗ': [[0,0,0], [0,1,0], [1,1,1]], // 파트너님이 제안하신 ㅗ 블록 형태
+            'I': [[0,0,1,0], [0,0,1,0], [0,0,1,0], [0,0,1,0]], // I는 4x4
+            '1x1': [[1]],
+            '1x2': [[1,1]]
         };
         let inventory = { 'ㄷ':1, 'L':1, 'T':1, 'ㅗ':1, 'I':1, '1x1':1, '1x2':1 };
 
@@ -118,34 +118,39 @@
 
         function rotateUnit() {
             currentRotation = (currentRotation + 90) % 360;
-            addGameLog("[알림] 회전 완료 (" + currentRotation + "도)");
+            addGameLog("[알림] 회전: " + currentRotation + "도");
+            if (selectedUnitType) showGhost(-1); // 고스트 즉시 갱신
         }
 
+        /* [핵심 알고리즘] 0은 무시하고 1만 격자에 투영하는 함수 */
         function getRotatedCells(type, pivotIdx, rotation) {
-            // [안전장치 2] 한글 키 정규화 매칭
+            if (!type) return [];
+            // 한글 인코딩 문제 해결을 위한 정규화 매칭
             const normalizedType = type.normalize('NFC');
             let matrix = null;
             for(let key in UNIT_DATA) { if(key.normalize('NFC') === normalizedType) { matrix = UNIT_DATA[key]; break; } }
             if(!matrix) return [];
 
-            let rotated = matrix;
+            // 행렬 회전 (90, 180, 270)
+            let rotated = JSON.parse(JSON.stringify(matrix));
             const times = (rotation / 90) % 4;
             for(let t=0; t<times; t++) {
-                const size = rotated.length;
-                let newMat = Array.from({ length: size }, () => Array(size).fill(0));
-                for(let r=0; r<size; r++) { for(let c=0; c<size; c++) { newMat[c][size - 1 - r] = rotated[r][c]; } }
+                const rows = rotated.length, cols = rotated[0].length;
+                let newMat = Array.from({ length: cols }, () => Array(rows).fill(0));
+                for(let r=0; r<rows; r++) { for(let c=0; c<cols; c++) { newMat[c][rows - 1 - r] = rotated[r][c]; } }
                 rotated = newMat;
             }
 
-            const size = rotated.length;
-            const mid = Math.floor(size / 2);
+            // 격자 좌표 계산 (마우스 클릭 지점이 상자의 정중앙)
+            const rows = rotated.length, cols = rotated[0].length;
+            const midR = Math.floor(rows / 2), midC = Math.floor(cols / 2);
             const px = pivotIdx % 20, py = Math.floor(pivotIdx / 20);
             
             let resultCells = [];
-            for(let r=0; r<size; r++) {
-                for(let c=0; c<size; c++) {
-                    if(rotated[r][c] === 1) {
-                        let fx = px + (c - mid), fy = py + (r - mid);
+            for(let r=0; r<rows; r++) {
+                for(let c=0; c<cols; c++) {
+                    if(rotated[r][c] === 1) { // 파트너님 말씀대로 1인 경우만 점유!
+                        let fx = px + (c - midC), fy = py + (r - midR);
                         if(fx < 0 || fx >= 20 || fy < 0 || fy >= 10) resultCells.push(-1);
                         else resultCells.push(fy * 20 + fx);
                     }
@@ -167,7 +172,7 @@
             if(!selectedUnitType || inventory[selectedUnitType] <= 0) return;
             const cells = getRotatedCells(selectedUnitType, idx, currentRotation);
             if(cells.includes(-1) || cells.some(c => myUnits.some(u => u.cells.includes(c)))) {
-                return addGameLog("[차단] 배치 불가 (경계 밖 또는 중복)");
+                return addGameLog("[오류] 격자 범위를 벗어납니다.");
             }
             myUnits.push({ type: selectedUnitType, cells: cells, isHit: false });
             inventory[selectedUnitType]--;
@@ -185,8 +190,10 @@
             });});
         }
 
+        let lastIdx = -1;
         function showGhost(idx) {
-            clearGhost(); if(!selectedUnitType) return;
+            if (idx === -1) idx = lastIdx; else lastIdx = idx;
+            clearGhost(); if(!selectedUnitType || idx === -1) return;
             const cells = getRotatedCells(selectedUnitType, idx, currentRotation);
             const myG = document.getElementById('my-grid');
             const inv = cells.includes(-1) || cells.some(c => myUnits.some(u => u.cells.includes(c)));
@@ -223,6 +230,7 @@
             document.getElementById('my-v').style.display = (me && me.isReady) ? 'inline' : 'none';
             if (opp) { document.getElementById('opp-name').innerText = opp.name; document.getElementById('opp-v').style.display = opp.isReady ? 'inline' : 'none'; }
             else { document.getElementById('opp-name').innerText = "대기 중"; document.getElementById('opp-v').style.display = 'none'; }
+
             if (data.gameState === 'LOBBY') {
                 const btn = document.getElementById('start-btn'); btn.disabled = false;
                 if (data.players.length === 2 && data.players.every(p => p.isReady)) { btn.innerText = "게임 시작하기!"; btn.style.background = "#FF9800"; }
