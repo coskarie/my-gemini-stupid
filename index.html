@@ -79,15 +79,15 @@
         let myName = "", myRoom = "", myUnits = [], isMyTurn = false;
         let gameStatus = "LOBBY", selectedUnitType = null, currentRotation = 0;
 
-        /* [수정 포인트 1] 파트너님의 3x3 매트릭스 이론 적용 */
+        // [안전장치 1] 모든 유닛을 3x3 또는 5x5로 규격화 (I블록은 5x5가 안전)
         const UNIT_DATA = {
             'ㄷ': [[1,1,0], [1,0,0], [1,1,0]],
             'L': [[1,0,0], [1,0,0], [1,1,0]],
             'T': [[1,1,1], [0,1,0], [0,0,0]],
             'ㅗ': [[0,1,0], [1,1,1], [0,0,0]],
-            'I': [[0,1,0,0], [0,1,0,0], [0,1,0,0], [0,1,0,0]], // I는 4x4 권장
-            '1x1': [[1]],
-            '1x2': [[1,1]]
+            'I': [[0,0,1,0,0], [0,0,1,0,0], [0,0,1,0,0], [0,0,1,0,0], [0,0,0,0,0]],
+            '1x1': [[0,0,0], [0,1,0], [0,0,0]],
+            '1x2': [[0,0,0], [0,1,1], [0,0,0]]
         };
         let inventory = { 'ㄷ':1, 'L':1, 'T':1, 'ㅗ':1, 'I':1, '1x1':1, '1x2':1 };
 
@@ -118,39 +118,34 @@
 
         function rotateUnit() {
             currentRotation = (currentRotation + 90) % 360;
-            addGameLog("[알림] 회전: " + currentRotation + "도");
+            addGameLog("[알림] 회전 완료 (" + currentRotation + "도)");
         }
 
-        /* [수정 포인트 2] 행렬 회전 알고리즘: 0은 무시, 1만 추출 */
         function getRotatedCells(type, pivotIdx, rotation) {
-            let matrix = UNIT_DATA[type];
+            // [안전장치 2] 한글 키 정규화 매칭
+            const normalizedType = type.normalize('NFC');
+            let matrix = null;
+            for(let key in UNIT_DATA) { if(key.normalize('NFC') === normalizedType) { matrix = UNIT_DATA[key]; break; } }
             if(!matrix) return [];
 
-            // 행렬 회전 수행
             let rotated = matrix;
             const times = (rotation / 90) % 4;
             for(let t=0; t<times; t++) {
-                const rows = rotated.length;
-                const cols = rotated[0].length;
-                let newMat = Array.from({ length: cols }, () => Array(rows).fill(0));
-                for(let r=0; r<rows; r++) {
-                    for(let c=0; c<cols; c++) {
-                        newMat[c][rows - 1 - r] = rotated[r][c];
-                    }
-                }
+                const size = rotated.length;
+                let newMat = Array.from({ length: size }, () => Array(size).fill(0));
+                for(let r=0; r<size; r++) { for(let c=0; c<size; c++) { newMat[c][size - 1 - r] = rotated[r][c]; } }
                 rotated = newMat;
             }
 
-            // 격자 투영 (피벗은 행렬의 정중앙)
-            const rows = rotated.length, cols = rotated[0].length;
-            const pr = Math.floor(rows / 2), pc = Math.floor(cols / 2);
+            const size = rotated.length;
+            const mid = Math.floor(size / 2);
             const px = pivotIdx % 20, py = Math.floor(pivotIdx / 20);
             
             let resultCells = [];
-            for(let r=0; r<rows; r++) {
-                for(let c=0; c<cols; c++) {
-                    if(rotated[r][c] === 1) { // 0은 해제(무시), 1인 경우만 계산
-                        let fx = px + (c - pc), fy = py + (r - pr);
+            for(let r=0; r<size; r++) {
+                for(let c=0; c<size; c++) {
+                    if(rotated[r][c] === 1) {
+                        let fx = px + (c - mid), fy = py + (r - mid);
                         if(fx < 0 || fx >= 20 || fy < 0 || fy >= 10) resultCells.push(-1);
                         else resultCells.push(fy * 20 + fx);
                     }
@@ -172,7 +167,7 @@
             if(!selectedUnitType || inventory[selectedUnitType] <= 0) return;
             const cells = getRotatedCells(selectedUnitType, idx, currentRotation);
             if(cells.includes(-1) || cells.some(c => myUnits.some(u => u.cells.includes(c)))) {
-                return addGameLog("[오류] 배치 불가 영역입니다.");
+                return addGameLog("[차단] 배치 불가 (경계 밖 또는 중복)");
             }
             myUnits.push({ type: selectedUnitType, cells: cells, isHit: false });
             inventory[selectedUnitType]--;
@@ -228,7 +223,6 @@
             document.getElementById('my-v').style.display = (me && me.isReady) ? 'inline' : 'none';
             if (opp) { document.getElementById('opp-name').innerText = opp.name; document.getElementById('opp-v').style.display = opp.isReady ? 'inline' : 'none'; }
             else { document.getElementById('opp-name').innerText = "대기 중"; document.getElementById('opp-v').style.display = 'none'; }
-
             if (data.gameState === 'LOBBY') {
                 const btn = document.getElementById('start-btn'); btn.disabled = false;
                 if (data.players.length === 2 && data.players.every(p => p.isReady)) { btn.innerText = "게임 시작하기!"; btn.style.background = "#FF9800"; }
