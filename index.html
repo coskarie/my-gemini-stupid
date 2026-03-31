@@ -25,7 +25,6 @@
         #start-btn { background: #4CAF50; color: white; border: none; font-size: 1.1em; padding: 10px 20px; transition: 0.3s; }
         #start-btn:disabled { background: #ccc; cursor: not-allowed; }
         .log-area, .chat-area { flex: 1; background: white; border: 1px solid #ccc; overflow-y: auto; padding: 10px; font-size: 0.85em; border-radius: 5px; }
-        /* 명단 스타일 복구 */
         .user-list-box { background: #eee; padding: 10px; border-radius: 5px; font-size: 0.9em; display: flex; flex-direction: column; gap: 5px; }
     </style>
 </head>
@@ -67,8 +66,8 @@
                 <div id="player-list">플레이어: </div>
                 <div id="spectator-list">관전자: </div>
                 <div style="display:flex; gap:5px; margin-top:5px;">
-                    <button onclick="changeRole('player')" style="flex:1; padding:5px;">플레이어로</button>
-                    <button onclick="changeRole('spectator')" style="flex:1; padding:5px;">관전자로</button>
+                    <button onclick="changeRole('player')" style="flex:1; padding:5px;">플레이어로 가기</button>
+                    <button onclick="changeRole('spectator')" style="flex:1; padding:5px;">관전자로 가기</button>
                 </div>
             </div>
         </div>
@@ -80,16 +79,17 @@
         let myName = "", myRoom = "", myUnits = [], isMyTurn = false;
         let gameStatus = "LOBBY", selectedUnitType = null, currentRotation = 0;
 
-        // [수정] 한글 매칭 문제를 피하기 위해 내부 키는 영문으로, 라벨은 한글로 분리
-        const UNIT_CONFIG = {
-            'ㄷ': { shape: [[0,0], [1,0], [0,1], [0,2], [1,2]], count: 1 },
-            'L': { shape: [[0,0], [0,1], [0,2], [1,2]], count: 1 },
-            'T': { shape: [[0,0], [1,0], [2,0], [1,1]], count: 1 },
-            'ㅗ': { shape: [[1,0], [0,1], [1,1], [2,1]], count: 1 },
-            'I': { shape: [[0,0], [0,1], [0,2], [0,3]], count: 1 },
-            '1x1': { shape: [[0,0]], count: 1 },
-            '1x2': { shape: [[0,0], [0,1]], count: 1 }
+        /* [수정 포인트 1] 파트너님의 3x3 매트릭스 이론 적용 */
+        const UNIT_DATA = {
+            'ㄷ': [[1,1,0], [1,0,0], [1,1,0]],
+            'L': [[1,0,0], [1,0,0], [1,1,0]],
+            'T': [[1,1,1], [0,1,0], [0,0,0]],
+            'ㅗ': [[0,1,0], [1,1,1], [0,0,0]],
+            'I': [[0,1,0,0], [0,1,0,0], [0,1,0,0], [0,1,0,0]], // I는 4x4 권장
+            '1x1': [[1]],
+            '1x2': [[1,1]]
         };
+        let inventory = { 'ㄷ':1, 'L':1, 'T':1, 'ㅗ':1, 'I':1, '1x1':1, '1x2':1 };
 
         function joinGame() {
             myName = document.getElementById('name-input').value;
@@ -121,26 +121,42 @@
             addGameLog("[알림] 회전: " + currentRotation + "도");
         }
 
+        /* [수정 포인트 2] 행렬 회전 알고리즘: 0은 무시, 1만 추출 */
         function getRotatedCells(type, pivotIdx, rotation) {
-            const config = UNIT_CONFIG[type];
-            if (!config) return [];
-            
-            let shape = config.shape, px = pivotIdx % 20, py = Math.floor(pivotIdx / 20);
-            
-            // 1. 회전된 좌표 생성
-            let rotated = shape.map(([dx, dy]) => {
-                let rx = dx, ry = dy;
-                for(let r=0; r < rotation/90; r++) { let tx = -ry; let ty = rx; rx = tx; ry = ty; }
-                return [rx, ry];
-            });
+            let matrix = UNIT_DATA[type];
+            if(!matrix) return [];
 
-            // 2. [수정 핵심] 클릭 지점이 모양의 가장 왼쪽 위(Top-Left)가 되도록 강제 정렬
-            let minX = Math.min(...rotated.map(o => o[0])), minY = Math.min(...rotated.map(o => o[1]));
-            return rotated.map(([rx, ry]) => {
-                let fx = px + (rx - minX), fy = py + (ry - minY);
-                if(fx < 0 || fx >= 20 || fy < 0 || fy >= 10) return -1;
-                return fy * 20 + fx;
-            });
+            // 행렬 회전 수행
+            let rotated = matrix;
+            const times = (rotation / 90) % 4;
+            for(let t=0; t<times; t++) {
+                const rows = rotated.length;
+                const cols = rotated[0].length;
+                let newMat = Array.from({ length: cols }, () => Array(rows).fill(0));
+                for(let r=0; r<rows; r++) {
+                    for(let c=0; c<cols; c++) {
+                        newMat[c][rows - 1 - r] = rotated[r][c];
+                    }
+                }
+                rotated = newMat;
+            }
+
+            // 격자 투영 (피벗은 행렬의 정중앙)
+            const rows = rotated.length, cols = rotated[0].length;
+            const pr = Math.floor(rows / 2), pc = Math.floor(cols / 2);
+            const px = pivotIdx % 20, py = Math.floor(pivotIdx / 20);
+            
+            let resultCells = [];
+            for(let r=0; r<rows; r++) {
+                for(let c=0; c<cols; c++) {
+                    if(rotated[r][c] === 1) { // 0은 해제(무시), 1인 경우만 계산
+                        let fx = px + (c - pc), fy = py + (r - pr);
+                        if(fx < 0 || fx >= 20 || fy < 0 || fy >= 10) resultCells.push(-1);
+                        else resultCells.push(fy * 20 + fx);
+                    }
+                }
+            }
+            return resultCells;
         }
 
         function placeOrPickUnit(idx) {
@@ -149,19 +165,18 @@
             if (uIdx !== -1) {
                 const u = myUnits[uIdx];
                 if (u.isHit) return alert("피격된 유닛 고정!");
-                myUnits.splice(uIdx, 1); UNIT_CONFIG[u.type].count++;
+                myUnits.splice(uIdx, 1); inventory[u.type]++;
                 selectedUnitType = u.type; renderInventory(); renderMyGrid();
                 return;
             }
-            if(!selectedUnitType || UNIT_CONFIG[selectedUnitType].count <= 0) return;
+            if(!selectedUnitType || inventory[selectedUnitType] <= 0) return;
             const cells = getRotatedCells(selectedUnitType, idx, currentRotation);
             if(cells.includes(-1) || cells.some(c => myUnits.some(u => u.cells.includes(c)))) {
-                addGameLog("[오류] 격자 밖이거나 중복 위치입니다.");
-                return;
+                return addGameLog("[오류] 배치 불가 영역입니다.");
             }
             myUnits.push({ type: selectedUnitType, cells: cells, isHit: false });
-            UNIT_CONFIG[selectedUnitType].count--;
-            if(UNIT_CONFIG[selectedUnitType].count <= 0) selectedUnitType = null;
+            inventory[selectedUnitType]--;
+            if(inventory[selectedUnitType] <= 0) selectedUnitType = null;
             renderInventory(); renderMyGrid();
         }
 
@@ -187,10 +202,10 @@
 
         function renderInventory() {
             const inv = document.getElementById('unit-inventory'); inv.innerHTML = '';
-            for(let t in UNIT_CONFIG) { if(UNIT_CONFIG[t].count > 0) {
+            for(let t in inventory) { if(inventory[t] > 0) {
                 const b = document.createElement('button');
                 b.className = 'unit-btn' + (selectedUnitType === t ? ' active' : '');
-                b.innerText = `${t}(${UNIT_CONFIG[t].count})`;
+                b.innerText = `${t}(${inventory[t]})`;
                 b.onclick = () => { selectedUnitType = t; renderInventory(); };
                 inv.appendChild(b);
             }}
@@ -201,8 +216,7 @@
             if (txt === "게임 시작하기!") socket.emit('startGame');
             else if (txt === "준비하기" || txt === "준비 취소") socket.emit('toggleReady');
             else if (gameStatus === "PLACING" || gameStatus === "MOVING") {
-                const totalUnits = Object.values(UNIT_CONFIG).reduce((a, b) => a + b.count, 0);
-                if (totalUnits > 0) return alert("모든 유닛 배치 필수!");
+                if (Object.values(inventory).some(v => v > 0)) return alert("모든 유닛 배치 필수!");
                 btn.disabled = true; btn.innerText = "대기 중...";
                 socket.emit('finishPlacing', myUnits);
             } else if (gameStatus === "ENDED") socket.emit('requestRematch');
@@ -231,6 +245,7 @@
             const g = (d.attacker === socket.id) ? document.getElementById('opponent-grid') : document.getElementById('my-grid');
             g.children[d.index].classList.add(d.hit ? 'hit-unit' : 'miss-cell');
             if(!d.hit) updateTurn(d.nextTurn);
+            addGameLog(`${d.attacker === socket.id ? "나" : "상대"}의 공격: ${d.hit ? "적중!" : "불발"}`);
         });
 
         function updateTurn(turnId) {
@@ -254,7 +269,7 @@
         function addGameLog(m) { const l = document.getElementById('game-log'); l.innerHTML += `<div>${m}</div>`; l.scrollTop = l.scrollHeight; }
         function resetPlacement() {
             if(gameStatus !== 'PLACING' && gameStatus !== 'MOVING') return;
-            myUnits.forEach(u => { if(!u.isHit) UNIT_CONFIG[u.type].count++; });
+            myUnits.forEach(u => { if(!u.isHit) inventory[u.type]++; });
             myUnits = myUnits.filter(u => u.isHit); renderInventory(); renderMyGrid();
         }
     </script>
