@@ -172,8 +172,9 @@
                 addGameLog("[차단] 관전자는 유닛을 배치할 수 없습니다.");
                 return;
             }
-            if (gameStatus !== 'PLACING') {
-                addGameLog("[차단] 아직 배치 단계가 아닙니다.");
+            // 🚨 수정: PLACING(배치)이거나 MOVING(기동)일 때는 통과!
+            if (gameStatus !== 'PLACING' && gameStatus !== 'MOVING') {
+                addGameLog("[차단] 지금은 유닛을 움직일 수 있는 단계가 아닙니다.");
                 return;
             }
 
@@ -211,7 +212,7 @@
 
             const remaining = Object.entries(inventory).filter(([,v]) => v > 0);
             if(remaining.length === 0) {
-                addGameLog("[성공] 모든 유닛 배치 완료! '배치 확정' 버튼을 누르세요.");
+                addGameLog("[성공] 모든 유닛 배치 완료! 확정 버튼을 누르세요.");
             }
         }
 
@@ -234,8 +235,8 @@
         function showGhost(idx) {
             clearGhost();
             
-            // 🔒 [조건 1, 2 완벽 적용] 플레이어가 아니거나 배치가 아니면 유령(미리보기) 차단
-            if (!isPlayer || gameStatus !== 'PLACING' || !selectedUnitType) return;
+            // 🚨 수정: MOVING 단계에서도 미리보기가 작동하도록 조건 추가
+            if (!isPlayer || (gameStatus !== 'PLACING' && gameStatus !== 'MOVING') || !selectedUnitType) return;
             
             const cells = getPlacementCells(selectedUnitType, idx);
             const myG = document.getElementById('my-grid');
@@ -268,7 +269,9 @@
         }
 
         function resetPlacement() {
-            if(gameStatus !== 'PLACING') return; // 배치 상태 아닐때 초기화 막기
+            // 🚨 수정: MOVING 상태일 때도 초기화 허용
+            if(gameStatus !== 'PLACING' && gameStatus !== 'MOVING') return; 
+            
             myUnits.forEach(u => { if(!u.isHit) inventory[u.type]++; });
             myUnits = myUnits.filter(u => u.isHit);
             selectedUnitType = Object.keys(inventory).find(t => inventory[t] > 0) || null;
