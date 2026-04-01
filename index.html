@@ -356,6 +356,21 @@
             const grid = (data.attacker === socket.id) ? document.getElementById('opponent-grid') : document.getElementById('my-grid');
             grid.children[data.index].classList.add(data.hit ? 'hit-unit' : 'miss-cell');
             if(!data.hit) updateTurn(data.nextTurn);
+            
+            // 🚨 [추가된 핵심 로직] 상대가 내 격자를 맞췄을 때, 내 브라우저도 데미지를 기억하게 함!
+            if (data.attacker !== socket.id && data.hit) {
+                myUnits.forEach(u => {
+                    if (u.cells.includes(data.index)) {
+                        if (!u.hitCells) u.hitCells = [];
+                        if (!u.hitCells.includes(data.index)) {
+                            u.hitCells.push(data.index);
+                        }
+                        u.isHit = true; // 한 대라도 맞으면 '이동 불가' 상태로 완전 잠금
+                    }
+                });
+                renderMyGrid(); // 맞은 유닛을 반투명하게 만드는 시각 효과 발동
+            }
+
             addGameLog(`${data.attacker === socket.id ? '내' : '상대'} 공격: ${data.index}번 → ${data.hit ? "💥 적중!" : "🌊 불발"}`);
         });
 
