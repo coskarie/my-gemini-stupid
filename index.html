@@ -62,7 +62,6 @@
             <div id="unit-inventory" class="inventory"></div>
             
             <div class="ctrl-group">
-                <button class="sub-btn" onclick="rotateUnit()">회전 🔄</button>
                 <button id="start-btn" onclick="handleButtonClick()">준비하기</button>
                 <button class="sub-btn" style="background:#e67e22;" onclick="resetPlacement()">초기화 🧹</button>
             </div>
@@ -72,7 +71,7 @@
         </div>
 
         <div class="right-panel">
-            <strong>📊 게임 로그 (클릭 오류 확인)</strong>
+            <strong>📊 게임 로그</strong>
             <div id="game-log" class="log-area"></div>
             
             <strong>💬 실시간 채팅</strong>
@@ -98,43 +97,16 @@
     <script>
         const socket = io();
         let myName = "", myRoom = "", myUnits = [], isMyTurn = false;
-        let gameStatus = "LOBBY", selectedUnitType = null, currentRotation = 0;
+        let gameStatus = "LOBBY", selectedUnitType = null;
 
-        // ✅ 핵심 수정: 모든 좌표를 [col(x), row(y)] 기준으로 통일
-        // 격자: col 0~19(가로), row 0~9(세로)
-        // index = row * 20 + col
+        // 회전이 없으므로 정의된 모양 그대로 사용
         const UNIT_SHAPES = {
-            // ㄷ 모양: col방향 2칸, row방향 3칸
-            //  X .
-            //  X X
-            //  X .
-            'ㄷ': [[0,0],[0,1],[0,2],[1,1]],   // ← 실제 ㄷ은 이 4칸
-
-            // L 모양: col방향 1칸, row방향 3칸 (세로 L)
-            //  X
-            //  X
-            //  X X
+            'ㄷ': [[0,0],[0,1],[0,2],[1,1]],
             'L':  [[0,0],[0,1],[0,2],[1,2]],
-
-            // T 모양: col방향 3칸, row방향 2칸
-            //  X X X
-            //    X
             'T':  [[0,0],[1,0],[2,0],[1,1]],
-
-            // ㅗ 모양: col방향 3칸, row방향 2칸
-            //    X
-            //  X X X
             'ㅗ': [[0,1],[1,0],[1,1],[2,1]],
-
-            // I 모양: col방향 4칸, row방향 1칸 (가로 막대)
-            //  X X X X
             'I':  [[0,0],[1,0],[2,0],[3,0]],
-
-            // 1x1
             '1x1': [[0,0]],
-
-            // 1x2: col방향 2칸
-            //  X X
             '1x2': [[0,0],[1,0]]
         };
 
@@ -171,31 +143,19 @@
             }
         }
 
-        function rotateUnit() {
-            currentRotation = (currentRotation + 90) % 360;
-            addGameLog("[알림] 유닛 회전됨: " + currentRotation + "도");
-        }
-
-        // ✅ getRotatedCells: [col, row] 기준으로 회전 및 normalization
-        function getRotatedCells(type, pivotIdx, rotation) {
+        // 회전 로직이 제거된 순수 배치 함수
+        function getPlacementCells(type, pivotIdx) {
             const shape = UNIT_SHAPES[type];
-            const pcol = pivotIdx % 20;       // 클릭한 셀의 col
-            const prow = Math.floor(pivotIdx / 20); // 클릭한 셀의 row
+            if(!shape) return [];
 
-            // 회전 적용: (col, row) 기준 90도 회전 = (col, row) → (-row, col)
-            const rotated = shape.map(([col, row]) => {
-                let c = col, r = row;
-                for(let i = 0; i < rotation / 90; i++) {
-                    [c, r] = [-r, c];
-                }
-                return [c, r];
-            });
+            const pcol = pivotIdx % 20;       // 마우스 위치 X
+            const prow = Math.floor(pivotIdx / 20); // 마우스 위치 Y
 
-            // Normalization: 최솟값을 0으로 맞춰 피벗 기준 배치
-            const minC = Math.min(...rotated.map(o => o[0]));
-            const minR = Math.min(...rotated.map(o => o[1]));
+            // 도형의 가장 왼쪽-위를 0,0으로 맞추기 위한 최솟값 찾기
+            const minC = Math.min(...shape.map(o => o[0]));
+            const minR = Math.min(...shape.map(o => o[1]));
 
-            return rotated.map(([c, r]) => {
+            return shape.map(([c, r]) => {
                 const fc = pcol + (c - minC);
                 const fr = prow + (r - minR);
                 // 격자 범위 초과 시 -1
@@ -206,7 +166,7 @@
 
         function placeOrPickUnit(idx) {
             if(gameStatus !== 'PLACING' && gameStatus !== 'MOVING') {
-                addGameLog("[차단] 지금은 배치 단계가 아님 (상태: " + gameStatus + ")");
+                addGameLog("[차단] 지금은 배치 단계가 아님");
                 return;
             }
 
@@ -228,10 +188,11 @@
                 return;
             }
 
-            const cells = getRotatedCells(selectedUnitType, idx, currentRotation);
+            // 회전 변수 없이 모양 그대로 계산
+            const cells = getPlacementCells(selectedUnitType, idx);
 
             if(cells.includes(-1)) {
-                addGameLog("[차단] 격자 밖으로 벗어납니다. 다른 위치에 놓으세요.");
+                addGameLog("[차단] 격자 밖으로 벗어납니다.");
                 return;
             }
             if(cells.some(c => myUnits.some(u => u.cells.includes(c)))) {
@@ -242,7 +203,7 @@
             myUnits.push({ type: selectedUnitType, cells: cells, isHit: false });
             inventory[selectedUnitType]--;
 
-            // 다음 배치할 유닛 자동 선택
+            // 다음 유닛 자동 선택
             if(inventory[selectedUnitType] <= 0) {
                 selectedUnitType = Object.keys(inventory).find(t => inventory[t] > 0) || null;
             }
@@ -251,9 +212,9 @@
 
             const remaining = Object.entries(inventory).filter(([,v]) => v > 0);
             if(remaining.length === 0) {
-                addGameLog("[성공] 모든 유닛 배치 완료! '배치 확정' 버튼을 눌러주세요.");
+                addGameLog("[성공] 모든 유닛 배치 완료! '배치 확정' 버튼을 누르세요.");
             } else {
-                addGameLog("[성공] 배치 완료. 남은 유닛: " + remaining.map(([k,v])=>`${k}(${v})`).join(', '));
+                addGameLog("[성공] " + selectedUnitType + " 배치 완료.");
             }
         }
 
@@ -277,9 +238,11 @@
             clearGhost();
             if(!selectedUnitType) return;
             if(gameStatus !== 'PLACING' && gameStatus !== 'MOVING') return;
-            const cells = getRotatedCells(selectedUnitType, idx, currentRotation);
+            
+            const cells = getPlacementCells(selectedUnitType, idx);
             const myG = document.getElementById('my-grid');
             const invalid = cells.includes(-1) || cells.some(c => myUnits.some(u => u.cells.includes(c)));
+            
             cells.forEach(c => { 
                 if(c >= 0 && c < 200) {
                     myG.children[c].classList.add('ghost');
@@ -363,11 +326,12 @@
             document.getElementById('spectator-list').innerText = "관전자: " + data.spectators.map(s => s.name).join(', ');
         });
 
+        function changeRole(r) { socket.emit('changeRole', r); }
+
         socket.on('startPlacing', () => {
             gameStatus = "PLACING";
             inventory = { 'ㄷ':1, 'L':1, 'T':1, 'ㅗ':1, 'I':1, '1x1':1, '1x2':1 };
             myUnits = [];
-            currentRotation = 0;
             selectedUnitType = Object.keys(inventory)[0];
             renderInventory(); renderMyGrid();
             const btn = document.getElementById('start-btn');
@@ -413,23 +377,17 @@
 
         socket.on('rematchStarted', () => { location.reload(); });
         socket.on('systemMsg', msg => addGameLog("[시스템] " + msg));
-        socket.on('receiveChat', d => {
-            const l = document.getElementById('chat-log');
-            l.innerHTML += `<div><strong>${d.name}:</strong> ${d.msg}</div>`;
-            l.scrollTop = l.scrollHeight;
-        });
-
-        function changeRole(r) { socket.emit('changeRole', r); }
+        
         function sendChat() {
             const i = document.getElementById('chat-input');
             if(i.value) socket.emit('sendChat', i.value);
             i.value = "";
         }
-        function addGameLog(m) {
-            const l = document.getElementById('game-log');
-            l.innerHTML += `<div>${m}</div>`;
+        socket.on('receiveChat', d => {
+            const l = document.getElementById('chat-log');
+            l.innerHTML += `<div><strong>${d.name}:</strong> ${d.msg}</div>`;
             l.scrollTop = l.scrollHeight;
-        }
+        });
     </script>
 </body>
 </html>
