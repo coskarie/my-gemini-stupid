@@ -558,7 +558,10 @@
                 addGameLog(`상대 공격: ${data.hit ? "💥 적중!" : (data.blocked ? "🛡️ 떡장갑에 막아냄!" : "🌊 불발")}`);
             }
             
-            if(!data.hit) updateTurn(data.nextTurn);
+            // 🚨 빗나갔을 때(!data.hit) 뿐만 아니라, 서버가 다음 턴 정보를 줬다면 무조건 업데이트!
+            if (!data.hit || data.nextTurn) {
+                updateTurn(data.nextTurn);
+            }
         });
 
         function updateTurn(turnId) {
