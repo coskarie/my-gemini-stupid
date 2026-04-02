@@ -235,7 +235,8 @@ io.on('connection', (socket) => {
             }
         } else {
             room.phraseCount++;
-            io.to(currentRoom).emit('attackResult', { attacker: socket.id, attackIndex, targetIndex, hit: false, nextTurn: opponent.id });
+            // 🚨 blocked: shieldBlocked 여부를 프론트로 같이 쏴줌!
+            io.to(currentRoom).emit('attackResult', { attacker: socket.id, attackIndex, targetIndex, hit: false, blocked: shieldBlocked, nextTurn: opponent.id });
             passTurn(room, opponent.id);
 
             if (room.phraseCount > 0 && room.phraseCount % 5 === 0) {
