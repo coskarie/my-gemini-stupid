@@ -45,6 +45,13 @@
         .chat-input-group { display: flex; gap: 5px; }
         .user-list-box { background: #eee; padding: 10px; border-radius: 5px; font-size: 0.9em; display: flex; flex-direction: column; gap: 5px; }
         .my-turn-border { border: 4px solid #ff9800 !important; }
+
+        /* 🚨 신규 기획: 연료 및 액션 패널 CSS */
+        .action-panel { display: none; gap: 5px; margin-top: 5px; }
+        .action-btn { padding: 6px; border: 1px solid #7f8c8d; border-radius: 4px; background: #ecf0f1; cursor: pointer; font-size: 0.85em; flex: 1; }
+        .action-btn.active { background: #e74c3c; color: white; border-color: #c0392b; font-weight: bold; }
+        #fuel-display { display: none; font-weight: bold; color: #2980b9; font-size: 1.1em; background: #d6eaf8; padding: 5px; border-radius: 4px; text-align: center; }
+        .moving-1x1 { box-shadow: 0 0 10px 3px #9b59b6 inset !important; } /* 선택된 1x1 유닛 시각 효과 */
     </style>
 </head>
 <body>
@@ -71,6 +78,12 @@
             </div>
             
             <div class="name-label">나: <span id="my-name-display">-</span> <span id="my-v" class="v-mark">[V]</span></div>
+            <div id="fuel-display">⛽ 연료: <span id="current-fuel">8</span> / <span id="max-fuel">8</span></div>
+            <div id="action-panel" class="action-panel">
+                <button id="btn-ATTACK" class="action-btn active" onclick="setActionMode('ATTACK')">🎯 타격</button>
+                <button id="btn-SNIPE" class="action-btn" onclick="setActionMode('SNIPE')">🔫 저격 (-1⛽)</button>
+                <button id="btn-MOVE" class="action-btn" onclick="setActionMode('MOVE')">🏃 기동 (-2⛽)</button>
+            </div>
             <div id="my-grid" class="grid" onmouseleave="clearGhost()"></div>
         </div>
 
@@ -106,6 +119,10 @@
         let selectedUnitType = null; 
         let isPlayer = false; 
 
+        // 🚨 신규 변수: 액션 모드 및 기동함선 선택용
+        let actionMode = 'ATTACK'; // 'ATTACK', 'SNIPE', 'MOVE'
+        let selected1x1Idx = -1; // 🏃 기동 모드에서 선택된 내 1x1 유닛 좌표
+
         // 🚨 1번 규칙: 기동 단계에서 원래 위치를 저장할 변수 
         let movingOriginalState = null; 
 
@@ -116,10 +133,12 @@
             'ㅗ': [[0,1],[1,0],[1,1],[2,1]],
             'I':  [[0,0],[1,0],[2,0],[3,0]],
             '1x1': [[0,0]],
-            '1x2': [[0,0],[1,0]]
+            '1x2': [[0,0],[1,0]],
+            '📦': [[0,0]] // 📦 심리전 강철 상자 추가!
         };
 
-        let inventory = { 'ㄷ':1, 'L':1, 'T':1, 'ㅗ':1, 'I':1, '1x1':1, '1x2':1 };
+        // 인벤토리에 강철 상자 1개 추가
+        let inventory = { 'ㄷ':1, 'L':1, 'T':1, 'ㅗ':1, 'I':1, '1x1':1, '1x2':1, '📦':1 };
 
         function joinGame() {
             myName = document.getElementById('name-input').value;
@@ -140,15 +159,64 @@
             for(let i=0; i<200; i++) {
                 const oCell = document.createElement('div');
                 oCell.onclick = function() { 
-                    if(gameStatus === 'PLAYING' && isMyTurn) socket.emit('attack', i); 
+                    if(gameStatus === 'PLAYING' && isMyTurn) {
+                        if (actionMode === 'MOVE') return alert("🏃 기동 모드입니다. 내 격자판의 1x1 함선을 클릭하세요.");
+                        // 서버로 공격 명령과 함께 '어떤 타입의 공격인지(일반/저격)'도 보냅니다.
+                        socket.emit('attack', { index: i, type: actionMode }); 
+                    }
                     else if(gameStatus === 'PLAYING' && !isMyTurn) addGameLog("[차단] 지금은 내 턴이 아닙니다.");
                 };
                 oppGrid.appendChild(oCell);
                 
                 const mCell = document.createElement('div');
                 mCell.onmouseenter = function() { showGhost(i); };
-                mCell.onclick = function() { placeOrPickUnit(i); };
+                mCell.onclick = function() { 
+                    // 🚨 내 턴이고 기동(MOVE) 모드일 때는 1x1 선택 및 이동 로직으로 빠짐
+                    if(gameStatus === 'PLAYING' && isMyTurn && actionMode === 'MOVE') {
+                        handleMove1x1Click(i);
+                    } else {
+                        placeOrPickUnit(i); 
+                    }
+                };
                 myGrid.appendChild(mCell);
+            }
+        }
+
+        // 🚨 신규 함수: 액션 버튼 클릭 시 모드 변경
+        function setActionMode(mode) {
+            actionMode = mode;
+            document.querySelectorAll('.action-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('btn-' + mode).classList.add('active');
+            selected1x1Idx = -1; // 모드가 바뀌면 선택해제
+            renderMyGrid();
+        }
+
+        // 🚨 신규 함수: 기동함선(1x1) 클릭 및 이동 로직 (클라이언트 1차 필터링)
+        function handleMove1x1Click(idx) {
+            // 1. 유닛 선택하기
+            if (selected1x1Idx === -1) {
+                const unit = myUnits.find(u => u.type === '1x1' && u.cells.includes(idx) && !u.isHit);
+                if (unit) {
+                    selected1x1Idx = idx;
+                    addGameLog("[기동] 1x1 함선을 선택했습니다. 이동할 인접한 빈칸을 클릭하세요.");
+                    renderMyGrid();
+                } else {
+                    alert("선택한 칸에 온전한 1x1 기동함선이 없습니다.");
+                }
+                return;
+            }
+
+            // 2. 선택 후 빈칸 클릭 시 서버로 이동 요청 쏘기
+            if (selected1x1Idx !== -1) {
+                if (myUnits.some(u => u.cells.includes(idx))) {
+                    alert("다른 유닛이 있는 곳으로는 이동할 수 없습니다!");
+                    selected1x1Idx = -1; renderMyGrid();
+                    return;
+                }
+                // 서버에 이동 요청 쏘기 (비용 및 거리 계산은 서버에서 철저히 검증)
+                socket.emit('move1x1', { from: selected1x1Idx, to: idx });
+                selected1x1Idx = -1; // 요청 후 선택 해제
+                renderMyGrid();
             }
         }
 
@@ -277,6 +345,9 @@
                     cells[c].classList.add('my-unit');
                     if(u.isHit) cells[c].style.opacity = "0.6";
                     if(u.hitCells && u.hitCells.includes(c)) cells[c].classList.add('hit-unit');
+                    
+                    // 🚨 추가된 1줄: 기동 모드에서 선택된 1x1 유닛을 예쁘게 빛나게 만듦
+                    if (c === selected1x1Idx) cells[c].classList.add('moving-1x1');
                 });
             });
         }
@@ -414,29 +485,40 @@
             gameStatus = "PLACING";
             movingOriginalState = null;
             if (myUnits.length === 0) {
-                inventory = { 'ㄷ':1, 'L':1, 'T':1, 'ㅗ':1, 'I':1, '1x1':1, '1x2':1 };
+                inventory = { 'ㄷ':1, 'L':1, 'T':1, 'ㅗ':1, 'I':1, '1x1':1, '1x2':1, '📦':1 }; // 상자 포함 리셋
                 selectedUnitType = Object.keys(inventory)[0];
             }
+            document.getElementById('fuel-display').style.display = 'none';
+            document.getElementById('action-panel').style.display = 'none';
             renderInventory(); renderMyGrid();
             const btn = document.getElementById('start-btn');
             btn.innerText = "배치 확정"; btn.style.background = "#2ecc71"; btn.disabled = false;
         });
 
         socket.on('startMoving', () => {
-            gameStatus = "MOVING";
-            movingOriginalState = null; // 기동 초기화
+            gameStatus = "MOVING"; // 이것은 5프레이즈 본대 재배치용 상태
+            movingOriginalState = null; 
             selectedUnitType = null;
-            myUnits.forEach(u => u.isMoved = false); // 이전에 기동했던 꼬리표 초기화
+            myUnits.forEach(u => u.isMoved = false); 
             
             const btn = document.getElementById('start-btn');
-            btn.innerText = "기동 확정"; btn.style.background = "#9b59b6"; btn.disabled = false;
-            addGameLog("[시스템] 전술 기동 단계입니다. 1개의 유닛만 재배치할 수 있습니다.");
+            btn.innerText = "본대 기동 확정"; btn.style.background = "#9b59b6"; btn.disabled = false;
+            addGameLog("[시스템] 본대 전술 기동 단계입니다. 1개의 유닛만 재배치할 수 있습니다. (1x1 제외)");
         });
 
         socket.on('gameStart', data => {
             gameStatus = "PLAYING";
+            document.getElementById('fuel-display').style.display = 'block';
+            document.getElementById('action-panel').style.display = 'flex';
+            setActionMode('ATTACK'); // 기본은 타격 모드
             updateTurn(data.turn);
-            addGameLog("[시스템] 전투 시작! 상대 격자를 공격하세요.");
+            addGameLog("[시스템] 전투 시작! 연료를 관리하며 액션을 선택하세요.");
+        });
+
+        // 🚨 신규 수신: 서버로부터 연료 현황 업데이트 받기
+        socket.on('updateFuel', data => {
+            document.getElementById('current-fuel').innerText = data.current;
+            document.getElementById('max-fuel').innerText = data.max;
         });
 
         socket.on('attackResult', data => {
@@ -484,7 +566,7 @@
             gameStatus = "LOBBY";
             selectedUnitType = null;
             movingOriginalState = null;
-            inventory = { 'ㄷ':1, 'L':1, 'T':1, 'ㅗ':1, 'I':1, '1x1':1, '1x2':1 };
+            inventory = { 'ㄷ':1, 'L':1, 'T':1, 'ㅗ':1, 'I':1, '1x1':1, '1x2':1, '📦':1 };
             
             initGrids(); // 양쪽 격자판 HTML 싹 지우고 새로 그리기
             renderInventory(); // 인벤토리 리셋
@@ -507,6 +589,12 @@
             const l = document.getElementById('chat-log');
             l.innerHTML += `<div><strong>${d.name}:</strong> ${d.msg}</div>`;
             l.scrollTop = l.scrollHeight;
+        });
+
+        socket.on('syncMovedUnit', data => {
+            let unit = myUnits.find(u => u.type === '1x1' && u.cells.includes(data.oldIdx));
+            if (unit) unit.cells = [data.newIdx];
+            renderMyGrid();
         });
 
         function addGameLog(m) {
