@@ -166,14 +166,16 @@ io.on('connection', (socket) => {
 
         const { index, type } = data;
         const attackIndex = index;
-        const targetIndex = 199 - attackIndex; 
+        // 🚨 199에서 139로 수정 (총 140칸 기준 거울 반전)
+        const targetIndex = 139 - attackIndex; 
 
         const attacker = room.players.find(p => p.id === socket.id);
         const opponent = room.players.find(p => p.id !== socket.id);
 
-        const attackX = attackIndex % 20; 
-        const targetX = targetIndex % 20;
-        const targetY = Math.floor(targetIndex / 20);
+        // 🚨 가로 칸 수를 20에서 14로 수정
+        const attackX = attackIndex % 14; 
+        const targetX = targetIndex % 14;
+        const targetY = Math.floor(targetIndex / 14);
 
         // 🔫 SNIPE (저격) 로직 검증
         if (type === 'SNIPE') {
@@ -186,11 +188,13 @@ io.on('connection', (socket) => {
             const hasLineOfSight = attacker.units.some(u => {
                 if (u.type !== 'I') return false; 
                 const isAlive = u.cells.length > (u.hitCells ? u.hitCells.length : 0);
-                const hasSight = isAlive && u.cells.some(c => c % 20 === attackX);
+                // 🚨 가로 칸 수를 20에서 14로 수정
+                const hasSight = isAlive && u.cells.some(c => c % 14 === attackX);
                 
                 // 사선이 맞다면, 이 저격수의 Y좌표를 저장해둡니다. (I블럭은 가로라 아무 셀이나 Y가 같음)
                 if (hasSight) {
-                    sniperY = Math.floor(u.cells[0] / 20); 
+                    // 🚨 가로 칸 수를 20에서 14로 수정
+                    sniperY = Math.floor(u.cells[0] / 14); 
                 }
                 return hasSight;
             });
@@ -203,11 +207,13 @@ io.on('connection', (socket) => {
                 const isAlive = u.cells.length > (u.hitCells ? u.hitCells.length : 0);
                 
                 // 조건 1: T블럭이 같은 사선(X열)에 있는가?
-                const sameX = u.cells.some(c => c % 20 === attackX); 
+                // 🚨 가로 칸 수를 20에서 14로 수정
+                const sameX = u.cells.some(c => c % 14 === attackX); 
                 
                 // 조건 2: T블럭이 저격수보다 '앞쪽(Y값이 작음)'에 있는가?
                 // T블럭의 셀 중 하나라도 저격수(sniperY)보다 Y값이 작으면 사선을 가린 것!
-                const isTFrontOfSniper = u.cells.some(c => Math.floor(c / 20) < sniperY);
+                // 🚨 가로 칸 수를 20에서 14로 수정
+                const isTFrontOfSniper = u.cells.some(c => Math.floor(c / 14) < sniperY);
 
                 return isAlive && sameX && isTFrontOfSniper; 
             });
@@ -227,8 +233,9 @@ io.on('connection', (socket) => {
             if (u.type === 'T') {
                 const isAlive = u.cells.length > (u.hitCells ? u.hitCells.length : 0);
                 if (isAlive) {
-                    const tXs = u.cells.map(c => c % 20);
-                    const tYs = u.cells.map(c => Math.floor(c / 20));
+                    // 🚨 가로 칸 수를 20에서 14로 수정
+                    const tXs = u.cells.map(c => c % 14);
+                    const tYs = u.cells.map(c => Math.floor(c / 14));
                     const minX = Math.min(...tXs);
                     const maxX = Math.max(...tXs);
                     const frontY = Math.min(...tYs); 
@@ -325,8 +332,9 @@ io.on('connection', (socket) => {
         
         if (player.fuel < 2) return socket.emit('systemMsg', "기동 실패: 연료가 2 필요합니다.");
 
-        const fromX = from % 20, fromY = Math.floor(from / 20);
-        const toX = to % 20, toY = Math.floor(to / 20);
+        // 🚨 가로 칸 수를 20에서 14로 수정
+        const fromX = from % 14, fromY = Math.floor(from / 14);
+        const toX = to % 14, toY = Math.floor(to / 14);
         if (Math.abs(fromX - toX) > 1 || Math.abs(fromY - toY) > 1) {
             return socket.emit('systemMsg', "기동 실패: 인접한 1칸(대각선 포함 8방향)으로만 이동 가능합니다.");
         }
@@ -340,15 +348,16 @@ io.on('connection', (socket) => {
         socket.emit('syncMovedUnit', { oldIdx: from, newIdx: to }); 
         socket.emit('systemMsg', "🏃 1x1 기동함선 이동 완료. (-2⛽)");
 
-        // 📡 레이더(L) 발각 판정 (내 toX는 상대방 입장에서는 19 - toX 열에 해당함!)
+        // 📡 레이더(L) 발각 판정 (내 toX는 상대방 입장에서는 13 - toX 열에 해당함!)
         const isSpotted = opponent.units.some(u => {
             if (u.type !== 'L') return false;
             const isAlive = u.cells.length > (u.hitCells ? u.hitCells.length : 0);
-            return isAlive && u.cells.some(c => c % 20 === (19 - toX));
+            return isAlive && u.cells.some(c => c % 14 === (13 - toX));
         });
 
         if (isSpotted) {
-            io.to(currentRoom).emit('systemMsg', "📡 [레이더 경보] 적 기동함선의 움직임이 포착되었습니다!");
+            // 🚨 currentRoom(방 전체) ➡️ opponent.id(레이더 주인) 에게만 귓속말 전송!
+            io.to(opponent.id).emit('systemMsg', "📡 [레이더 경보] 적 기동함선의 움직임이 포착되었습니다!");
         }
     });
 
@@ -432,7 +441,6 @@ io.on('connection', (socket) => {
         }
     }
 
-    // 🚨 실수로 날아갔던 함수 부활! 
     function updateRoomInfo(roomCode) {
         if (rooms[roomCode]) {
             io.to(roomCode).emit('roomData', rooms[roomCode]);
