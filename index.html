@@ -29,18 +29,26 @@
         .v-mark { color: #4CAF50; font-weight: 900; display: none; }
 
         .grid { 
-            width: 100%; height: 210px; background: #34495e; border: 2px solid #333; 
-            /* 🚨 20칸에서 14칸으로 수정 */
+            width: 100%; height: 210px; 
+            
+            /* 🚨 바둑판 밑그림 이미지 설정 (필요하면 rgba 투명도 필터 유지) */
+            background: url('Game_Grid.png') no-repeat center center;
+            
+            /* 🚨 그림이 잘리지 않고 가로세로 격자 끝에 완벽히 딱 맞게 늘어나거나 줄어듭니다! */
+            background-size: 100% 100%;
+            
+            border: 2px solid #333; 
             display: grid; grid-template-columns: repeat(14, 1fr); grid-template-rows: repeat(10, 1fr); 
         }
-        .grid div { border: 0.1px solid #555; cursor: pointer; box-sizing: border-box; }
+        .grid div { border: 0.1px solid #ffffff; cursor: pointer; box-sizing: border-box; }
         
         .my-unit { background: #2ecc71 !important; border: 1px solid #27ae60 !important; }
         .hit-unit { background: #e74c3c !important; border: 1px solid #c0392b !important; }
         .miss-cell { background: #95a5a6 !important; }
+        .sniper-line { background: rgba(52, 152, 219, 0.5) !important; border: 1px dashed #2980b9 !important; }
 
         /* 🚨 강철 상자 전용 갈색 CSS 추가 */
-        .box-unit { background: #8d6e63 !important; border: 1px solid #5d4037 !important; }
+        .box-unit { background: #452a24 !important; border: 1px solid #5d4037 !important; }
         /* 🚨 시각적 마스터키 CSS 완벽 구현 🚨 */
         .ghost { background: rgba(46, 204, 113, 0.4); } 
         .ghost-purple { background: rgba(155, 89, 182, 0.6); } /* 움직이는 보라색 유닛 */
@@ -179,7 +187,13 @@
                 oCell.onclick = function() { 
                     if(gameStatus === 'PLAYING' && isMyTurn) {
                         if (actionMode === 'MOVE') return alert("🏃 기동 모드입니다. 내 격자판의 1x1 함선을 클릭하세요.");
-                        // 서버로 공격 명령과 함께 '어떤 타입의 공격인지(일반/저격)'도 보냅니다.
+                        
+                        // 🚨 사격(클릭)하는 순간 하늘색 가이드라인 즉시 제거!
+                        if (actionMode === 'SNIPE') {
+                            renderSniperLines(false);
+                        }
+
+                        // 서버로 공격 명령
                         socket.emit('attack', { index: i, type: actionMode }); 
                     }
                     else if(gameStatus === 'PLAYING' && !isMyTurn) addGameLog("[차단] 지금은 내 턴이 아닙니다.");
@@ -219,6 +233,8 @@
             document.getElementById('btn-' + mode).classList.add('active');
             selected1x1Idx = -1; // 모드가 바뀌면 선택해제
             renderMyGrid();
+            // 🚨 모드가 바뀔 때 저격(SNIPE)이면 라인 켜고, 아니면 끄기
+            renderSniperLines(mode === 'SNIPE');
         }
 
         // 🚨 신규 함수: 기동함선(1x1) 클릭 및 이동 로직 (클라이언트 1차 필터링)
@@ -390,6 +406,44 @@
                     if (c === selected1x1Idx) cells[c].classList.add('moving-1x1');
                 });
             });
+        }
+
+        // 🚨 저격 가이드라인을 그리고 지우는 전용 함수
+        function renderSniperLines(show) {
+            const oppCells = document.getElementById('opponent-grid').children;
+            
+            // 1. 일단 기존 스나이퍼 라인을 싹 지웁니다.
+            for(let i=0; i<140; i++) {
+                oppCells[i].classList.remove('sniper-line');
+            }
+
+            // 2. 끄라고 했거나, 내 턴이 아니면 여기서 종료
+            if (!show || gameStatus !== 'PLAYING' || !isMyTurn) return;
+
+            // 3. 내 'I' 블럭 중 살아있는 녀석들의 X좌표(열) 수집
+            let validCols = [];
+            myUnits.forEach(u => {
+                if (u.type === 'I') {
+                    const isAlive = u.cells.length > (u.hitCells ? u.hitCells.length : 0);
+                    if (isAlive) {
+                        u.cells.forEach(c => {
+                            let col = c % 14;
+                            if (!validCols.includes(col)) validCols.push(col);
+                        });
+                    }
+                }
+            });
+
+            // 4. 수집된 X좌표에 해당하는 상대방 격자판에 색칠 (단, 이미 때린 곳은 제외!)
+            for(let i=0; i<140; i++) {
+                let col = i % 14;
+                if (validCols.includes(col)) {
+                    // 🚨 핵심: 빨간색(hit)이나 회색(miss)이 없을 때만 하늘색을 칠함
+                    if (!oppCells[i].classList.contains('hit-unit') && !oppCells[i].classList.contains('miss-cell')) {
+                        oppCells[i].classList.add('sniper-line');
+                    }
+                }
+            }
         }
 
         function showGhost(idx) {
