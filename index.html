@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>블록 찾기: 전술 기동 온라인</title>
+    <title>블록 찾기: 언더 더 레이더(Under the Radar)</title>
     <style>
         body { font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; margin: 0; background: #f0f0f0; overflow: hidden; }
         #login-screen { 
@@ -29,13 +29,13 @@
         .v-mark { color: #4CAF50; font-weight: 900; display: none; }
 
         .grid { 
-            width: 100%; height: 210px; background: #63adf8; border: 2px solid #ffffff; 
+            width: 100%; height: 210px; background: #88c9d9; border: 2px solid #096694; 
             /* 🚨 20칸에서 14칸으로 수정 */
             display: grid; grid-template-columns: repeat(14, 1fr); grid-template-rows: repeat(10, 1fr); 
         }
-        .grid div { border: 0.1px solid #ffffff; cursor: pointer; box-sizing: border-box; }
+        .grid div { border: 0.1px solid #e0f5ff; cursor: pointer; box-sizing: border-box; }
         
-        .my-unit { background: #2ecc71 !important; border: 1px solid #27ae60 !important; }
+        .my-unit { background: #72e968 !important; border: 1px solid #27ae60 !important; }
         .hit-unit { background: #e74c3c !important; border: 1px solid #c0392b !important; }
         .miss-cell { background: #95a5a6 !important; }
         .sniper-line { background: rgba(52, 152, 219, 0.5) !important; border: 1px dashed #2980b9 !important; }
@@ -48,11 +48,11 @@
         .ghost-original { background: rgba(255, 255, 255, 0.6); border: 2px dashed #ecf0f1 !important; } /* 제자리 흰색 껍데기 */
         .ghost-invalid { background: rgba(231, 76, 60, 0.4); }
 
-        .inventory { display: flex; gap: 5px; flex-wrap: wrap; background: #ddd; padding: 8px; border-radius: 5px; margin-bottom: 5px; min-height: 45px; }
+        .inventory { display: flex; gap: 5px; flex-wrap: wrap; background: #f5daa9; padding: 8px; border-radius: 5px; margin-bottom: 5px; min-height: 45px; }
         .unit-btn { padding: 6px 10px; border: 1px solid #333; cursor: pointer; background: white; font-weight: bold; font-size: 0.85em; }
-        .unit-btn.active { background: #3498db; color: white; border-color: #2980b9; }
+        .unit-btn.active { background: #f26419; color: white; border-color: #421c07; }
         
-        .ctrl-group { display: flex; gap: 8px; justify-content: center; margin-bottom: 5px; }
+        .ctrl-group { display: flex; gap: 8px; justify-content: center; margin-top: 24px;}
         button { cursor: pointer; border-radius: 4px; border: 1px solid #999; font-weight: bold; }
         #start-btn { background: #4CAF50; color: white; border: none; font-size: 1.1em; padding: 10px 20px; transition: 0.3s; }
         #start-btn:disabled { background: #ccc; cursor: not-allowed; }
@@ -74,7 +74,7 @@
 <body>
 
     <div id="login-screen">
-        <h1>전술 기동 블록 찾기</h1>
+        <h1>언더 더 레이더</h1>
         <div style="margin-bottom: 10px; display: flex; flex-direction: column; gap: 5px;">
             <input type="text" id="name-input" placeholder="이름 입력" style="padding: 10px; width: 200px;" value="테스터">
             <input type="number" id="room-input" placeholder="방 번호" style="padding: 10px; width: 200px;" value="1">
@@ -86,12 +86,10 @@
         <div class="left-panel">
             <div class="name-label">상대: <span id="opp-name">대기 중</span> <span id="opp-v" class="v-mark">[V]</span></div>
             <div id="opponent-grid" class="grid"></div>
-            
-            <div id="unit-inventory" class="inventory"></div>
-            
+
             <div class="ctrl-group">
                 <button id="start-btn" onclick="handleButtonClick()">준비하기</button>
-                <button class="sub-btn" style="background:#e67e22;" onclick="resetPlacement()">초기화 🧹</button>
+                <button class="sub-btn" style="background:#fb8500;" onclick="resetPlacement()">초기화 🧹</button>
             </div>
             
             <div class="name-label">나: <span id="my-name-display">-</span> <span id="my-v" class="v-mark">[V]</span></div>
@@ -102,6 +100,7 @@
                 <button id="btn-MOVE" class="action-btn" onclick="setActionMode('MOVE')">🏃 기동 (-2⛽)</button>
             </div>
             <div id="my-grid" class="grid" onmouseleave="clearGhost()"></div>
+            <div id="unit-inventory" class="inventory"></div>
             <div id="phrase-display" style="font-size: 1.05em; font-weight: bold; color: #34495e; margin-top: 5px; margin-left: 5px;">[ 1 프레이즈 ]</div>
         </div>
 
