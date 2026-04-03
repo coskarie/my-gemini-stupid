@@ -193,7 +193,7 @@
                             renderSniperLines(false);
                         }
 
-                        // 서버로 공격 명령
+                        // 서버로 공격 명령.
                         socket.emit('attack', { index: i, type: actionMode }); 
                     }
                     else if(gameStatus === 'PLAYING' && !isMyTurn) addGameLog("[차단] 지금은 내 턴이 아닙니다.");
