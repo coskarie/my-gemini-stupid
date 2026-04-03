@@ -184,8 +184,20 @@
             }
         }
 
-        // 🚨 신규 함수: 액션 버튼 클릭 시 모드 변경
+        // 🚨 신규 함수: 액션 버튼 클릭 시 모드 변경 (연료 체크 로직 추가!)
         function setActionMode(mode) {
+            // 현재 화면에 표시된 연료량을 숫자로 가져옵니다.
+            const currentFuel = parseInt(document.getElementById('current-fuel').innerText) || 0;
+
+            // 연료가 부족하면 경고 띄우고 무조건 'ATTACK'으로 강제 변경
+            if (mode === 'SNIPE' && currentFuel < 1) {
+                addGameLog("[시스템] ⛽ 연료가 부족하여 저격을 사용할 수 없습니다.");
+                mode = 'ATTACK';
+            } else if (mode === 'MOVE' && currentFuel < 2) {
+                addGameLog("[시스템] ⛽ 연료가 부족하여 기동할 수 없습니다.");
+                mode = 'ATTACK';
+            }
+
             actionMode = mode;
             document.querySelectorAll('.action-btn').forEach(btn => btn.classList.remove('active'));
             document.getElementById('btn-' + mode).classList.add('active');
@@ -522,10 +534,17 @@
             addGameLog("[시스템] 전투 시작! 연료를 관리하며 액션을 선택하세요.");
         });
 
-        // 🚨 신규 수신: 서버로부터 연료 현황 업데이트 받기
+        // 🚨 신규 수신: 서버로부터 연료 현황 업데이트 받기 (자동 복귀 로직 추가!)
         socket.on('updateFuel', data => {
             document.getElementById('current-fuel').innerText = data.current;
             document.getElementById('max-fuel').innerText = data.max;
+
+            // 방금 쏜 저격이나 기동 때문에 연료가 바닥났다면, 즉시 타격 모드로 자동 복귀!
+            if (actionMode === 'SNIPE' && data.current < 1) {
+                setActionMode('ATTACK');
+            } else if (actionMode === 'MOVE' && data.current < 2) {
+                setActionMode('ATTACK');
+            }
         });
 
         socket.on('attackResult', data => {
