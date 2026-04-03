@@ -101,6 +101,7 @@
                 <button id="btn-MOVE" class="action-btn" onclick="setActionMode('MOVE')">🏃 기동 (-2⛽)</button>
             </div>
             <div id="my-grid" class="grid" onmouseleave="clearGhost()"></div>
+            <div id="phrase-display" style="font-size: 1.05em; font-weight: bold; color: #34495e; margin-top: 5px; margin-left: 5px;">[ 1 프레이즈 ]</div>
         </div>
 
         <div class="right-panel">
@@ -652,6 +653,10 @@
             let unit = myUnits.find(u => u.type === '1x1' && u.cells.includes(data.oldIdx));
             if (unit) unit.cells = [data.newIdx];
             renderMyGrid();
+        });
+        
+        socket.on('updatePhrase', phrase => {
+            document.getElementById('phrase-display').innerText = `[ ${phrase} 프레이즈 ]`;
         });
 
         function addGameLog(m) {
