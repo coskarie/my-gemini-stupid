@@ -93,22 +93,46 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 5. 배치 및 전술 기동 확정 로직 (🚨 수신 데이터 확인 로그 추가)
+    // 5. 배치 및 전술 기동 확정 로직
     socket.on('finishPlacing', (units) => {
         const room = rooms[currentRoom];
         
         if (!room || (room.gameState !== 'PLACING' && room.gameState !== 'MOVING')) return;
         
         const player = room.players.find(p => p.id === socket.id);
-        if (player) {
-            // 클라이언트가 보낸 데이터로 덮어쓰기
+        if (!player) return;
+
+        if (room.gameState === 'MOVING') {
+            // ✅ 버그 수정 핵심 부분
+            // 기존 코드: player.units = units → 서버가 기억하던 피격 기록이 싹 날아감
+            // 수정 코드: 좌표(cells)만 바꾸고, 피격 기록(hitCells/isHit)은 그대로 보존
+            const typePool = {};
+            player.units.forEach(u => {
+                if (!typePool[u.type]) typePool[u.type] = [];
+                typePool[u.type].push(u);
+            });
+
+            units.forEach(newUnit => {
+                const pool = typePool[newUnit.type];
+                if (pool && pool.length > 0) {
+                    pool.shift().cells = newUnit.cells; // 좌표만 덮어쓰기
+                }
+            });
+
+            // 🚨 [CCTV] 기동 후 저격수 좌표 확인용 로그
+            const sniper = player.units.find(u => u.type === 'I');
+            console.log(`[기동 확정] ${player.name}의 저격수(I) 갱신된 좌표:`, sniper ? sniper.cells : "없음");
+
+        } else {
+            // PLACING 단계는 처음 배치라 피격 기록이 없으므로 기존대로 전체 교체해도 됨
             player.units = units;
-            player.placed = true;
-            
-            // 🚨 [CCTV 1] 확정 버튼을 눌렀을 때 서버가 받은 저격수 좌표 확인!
+
+            // 🚨 [CCTV] 최초 배치 저격수 좌표 확인용 로그
             const sniper = units.find(u => u.type === 'I');
-            console.log(`[데이터 수신] ${player.name} 확정. 서버가 저장한 저격수(I) 좌표:`, sniper ? sniper.cells : "없음");
+            console.log(`[배치 확정] ${player.name}의 저격수(I) 좌표:`, sniper ? sniper.cells : "없음");
         }
+
+        player.placed = true;
 
         if (room.players.length === 2 && room.players.every(p => p.placed)) {
             const prevState = room.gameState;
