@@ -21,24 +21,40 @@
             z-index: 1000; 
         }
         #main-game { display: none; flex: 1; padding: 10px; gap: 15px; overflow-y: auto; }
-        
-        .left-panel { flex: 2; display: flex; flex-direction: column; gap: 5px; }
+
+        /* 좌측 게임칸*/
+        .left-panel { 
+            flex: 2; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 5px; 
+            
+            /* 🚨 여기에 왼쪽 창 전체 배경 이미지 적용! */
+            background: url('Game_Grid.png') no-repeat center center;
+            background-size: 100% 100%; /* 왼쪽 창 크기에 딱 맞게 조절 */
+            padding: 15px; /* 배경이랑 격자가 너무 붙지 않게 여백 추가 */
+            border-radius: 10px;
+        }
+
+        /* 우측 로그 및 채팅창*/
         .right-panel { flex: 1; display: flex; flex-direction: column; gap: 10px; min-width: 250px; }
+        
+
         
         .name-label { font-size: 1.1em; font-weight: bold; display: flex; align-items: center; gap: 8px; margin: 2px 0; }
         .v-mark { color: #4CAF50; font-weight: 900; display: none; }
 
         .grid { 
-            width: 100%; height: 210px; 
+            width: 100%; 
+            height: 210px; 
             
-            /* 🚨 바둑판 밑그림 이미지 설정 (필요하면 rgba 투명도 필터 유지) */
-            background: url('Game_Grid.png') no-repeat center center;
-            
-            /* 🚨 그림이 잘리지 않고 가로세로 격자 끝에 완벽히 딱 맞게 늘어나거나 줄어듭니다! */
-            background-size: 100% 100%;
+            /* 🚨 배경색을 투명(transparent)하게 변경하거나, 살짝 어두운 필터만 씌움 */
+            background: rgba(0, 0, 0, 0.2); 
             
             border: 2px solid #333; 
-            display: grid; grid-template-columns: repeat(14, 1fr); grid-template-rows: repeat(10, 1fr); 
+            display: grid; 
+            grid-template-columns: repeat(14, 1fr); 
+            grid-template-rows: repeat(10, 1fr); 
         }
         .grid div { border: 0.1px solid #ffffff; cursor: pointer; box-sizing: border-box; }
         
@@ -193,7 +209,7 @@
                             renderSniperLines(false);
                         }
 
-                        // 서버로 공격 명령.
+                        // 서버로 공격 명령
                         socket.emit('attack', { index: i, type: actionMode }); 
                     }
                     else if(gameStatus === 'PLAYING' && !isMyTurn) addGameLog("[차단] 지금은 내 턴이 아닙니다.");
