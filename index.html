@@ -9,19 +9,43 @@
         #login-screen { 
             position: fixed; 
             inset: 0; 
-            
-            /* 🚨 파일 이름 Title_Img.png 적용 */
-            background: linear-gradient(rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0.6)), url('Title_Img.png') no-repeat center center;
-            background-size: cover; 
-            
             display: flex; 
             flex-direction: column; 
             align-items: center; 
             justify-content: center; 
             z-index: 1000; 
+            /* 배경 이미지가 사라지는 하단 바닥색 (흰색으로 유지) */
+            background-color: white; 
         }
+
+        /* 2. 🚨 배경 이미지 전용 (페이드 아웃 담당) */
+        #login-screen::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            
+            /* 원본의 0.6 투명도 필터와 이미지를 그대로 가져옴 */
+            background: linear-gradient(rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.6)), 
+                        url('Title_Img.png') no-repeat center top; /* 말림 방지용 top 고정 */
+            background-size: cover;
+
+            /* 🌟 상단은 100% 보이고, 하단으로 갈수록 투명해지는 마스크 */
+            -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+            mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+            
+            /* 마스크 크기를 배경과 일치시킴 */
+            -webkit-mask-size: 100% 100%;
+            mask-size: 100% 100%;
+
+            z-index: -1; /* 입력창(h1, input 등)보다 뒤로 보냄 */
+        }
+
         #main-game { display: none; flex: 1; padding: 10px; gap: 15px; overflow-y: auto; }
-        
+        .login-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
         .left-panel { flex: 2; display: flex; flex-direction: column; gap: 5px; }
         .right-panel { flex: 1; display: flex; flex-direction: column; gap: 10px; min-width: 250px; }
         
@@ -74,12 +98,16 @@
 <body>
 
     <div id="login-screen">
-        <h1>언더 더 레이더</h1>
-        <div style="margin-bottom: 10px; display: flex; flex-direction: column; gap: 5px;">
-            <input type="text" id="name-input" placeholder="이름 입력" style="padding: 10px; width: 200px;" value="테스터">
-            <input type="number" id="room-input" placeholder="방 번호" style="padding: 10px; width: 200px;" value="1">
+        <div class="login-bg-layer"></div>
+
+        <div class="login-content">
+            <h1>언더 더 레이더</h1>
+            <div style="margin-bottom: 10px; display: flex; flex-direction: column; gap: 5px;">
+                <input type="text" id="name-input" placeholder="이름 입력" style="padding: 10px; width: 200px;" value="테스터">
+                <input type="number" id="room-input" placeholder="방 번호" style="padding: 10px; width: 200px;" value="1">
+            </div>
+            <button onclick="joinGame()" style="padding: 12px 30px; background:#2ecc71; color:white; border:none; font-size: 1.1em;">입장하기</button>
         </div>
-        <button onclick="joinGame()" style="padding: 12px 30px; background:#2ecc71; color:white; border:none; font-size: 1.1em;">입장하기</button>
     </div>
 
     <div id="main-game">
