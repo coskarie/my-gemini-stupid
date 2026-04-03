@@ -257,9 +257,9 @@ io.on('connection', (socket) => {
                     }
                     
                     if (unit.type === '📦') {
-                        opponent.fuel += 2;
-                        io.to(currentRoom).emit('systemMsg', "📦 강철 상자 피격! 상대방이 연료를 2 획득했습니다.");
-                        io.to(opponent.id).emit('updateFuel', { current: opponent.fuel, max: opponent.maxFuel });
+                        // 🚨 즉시 지급이 아니라 '보너스 통장'에 적립해둠
+                        opponent.bonusFuel = (opponent.bonusFuel || 0) + 2;
+                        io.to(currentRoom).emit('systemMsg', "📦 강철 상자 피격! 다음 턴 시작 시 상대방에게 보너스 연료가 +2 지급됩니다.");
                     }
                 }
             });
@@ -400,25 +400,32 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 🚨 턴 넘기기 유틸 함수 (연료 마이너스 통장 탈출 공식 적용!)
+    // 🚨 턴 넘기기 유틸 함수 (연료 마이너스 통장 탈출 및 상자 보너스 적용!)
     function passTurn(room, nextTurnId) {
         room.turn = nextTurnId;
         const nextPlayer = room.players.find(p => p.id === nextTurnId);
+        
         if (nextPlayer) {
             const aliveShips = nextPlayer.units.filter(u => u.type !== '📦' && u.cells.length > (u.hitCells ? u.hitCells.length : 0)).length;
             
-            // 🚨 매 턴마다 [최대 연료 - 생존 함선 수] 공식으로 리필!
-            nextPlayer.fuel = nextPlayer.maxFuel - aliveShips; 
-            if (nextPlayer.fuel < 0) nextPlayer.fuel = 0; 
+            // 🚨 1. 기본 연료 계산 (최대 연료 - 생존 함선 수)
+            let baseFuel = nextPlayer.maxFuel - aliveShips; 
+            if (baseFuel < 0) baseFuel = 0; 
             
-            io.to(nextTurnId).emit('updateFuel', { current: nextPlayer.fuel, max: nextPlayer.maxFuel });
-            io.to(nextTurnId).emit('systemMsg', `🔥 내 턴 시작! (유지비 차감 후 연료: ⛽ ${nextPlayer.fuel})`);
-        }
-    }
+            // 🚨 2. 보너스 통장에서 연료 꺼내기 (강철 상자 혜택)
+            const bonus = nextPlayer.bonusFuel || 0;
+            nextPlayer.fuel = baseFuel + bonus; // 기본 연료에 보너스 합산!
+            nextPlayer.bonusFuel = 0; // 보너스 수령 후 통장 초기화 (먹튀 방지)
 
-    function updateRoomInfo(roomCode) {
-        if (rooms[roomCode]) {
-            io.to(roomCode).emit('roomData', rooms[roomCode]);
+            // 🚨 3. 클라이언트에 갱신된 연료 정보 쏘기
+            io.to(nextTurnId).emit('updateFuel', { current: nextPlayer.fuel, max: nextPlayer.maxFuel });
+            
+            // 🚨 4. 보너스 유무에 따라 시스템 메시지를 다르게 출력
+            if (bonus > 0) {
+                io.to(nextTurnId).emit('systemMsg', `🔥 내 턴 시작! (🎁상자 보너스 +${bonus} 합산됨! 현재 연료: ⛽ ${nextPlayer.fuel})`);
+            } else {
+                io.to(nextTurnId).emit('systemMsg', `🔥 내 턴 시작! (유지비 차감 후 연료: ⛽ ${nextPlayer.fuel})`);
+            }
         }
     }
 });
