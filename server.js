@@ -176,26 +176,37 @@ io.on('connection', (socket) => {
         if (type === 'SNIPE') {
             if (attacker.fuel < 1) return socket.emit('systemMsg', "저격 실패: 연료가 1 필요합니다.");
             
-            // 🚨 [CCTV 2] 저격 버튼 누른 순간 서버가 판단하는 사선과 현재 좌표 비교!
-            const currentSniper = attacker.units.find(u => u.type === 'I');
-            console.log(`[저격 시도] ${attacker.name}이(가) 클릭한 사선(attackX): ${attackX}`);
-            console.log(`[저격 시도] 서버 메모리에 박혀있는 저격수(I)의 X열들:`, currentSniper ? currentSniper.cells.map(c => c % 20) : "없음");
+            // 🚨 저격수의 Y좌표를 기억할 변수
+            let sniperY = -1; 
 
+            // 1. 저격 사선 검증 및 저격수 Y좌표 추출
             const hasLineOfSight = attacker.units.some(u => {
                 if (u.type !== 'I') return false; 
                 const isAlive = u.cells.length > (u.hitCells ? u.hitCells.length : 0);
-                return isAlive && u.cells.some(c => c % 20 === attackX);
+                const hasSight = isAlive && u.cells.some(c => c % 20 === attackX);
+                
+                // 사선이 맞다면, 이 저격수의 Y좌표를 저장해둡니다. (I블럭은 가로라 아무 셀이나 Y가 같음)
+                if (hasSight) {
+                    sniperY = Math.floor(u.cells[0] / 20); 
+                }
+                return hasSight;
             });
+            
+            if (!hasLineOfSight) return socket.emit('systemMsg', "저격 실패: 아군 ㅡ(I) 블럭의 사선(X열)을 벗어났습니다!");
 
-            if (!hasLineOfSight) {
-                console.log(`❌ 사선 불일치로 저격 실패 판정됨.`);
-                return socket.emit('systemMsg', "저격 실패: 아군 ㅡ(I) 블럭의 사선(X열)을 벗어났습니다!");
-            }
-
+            // 2. 아군 탱커(T) 오사 방지 검증 (🚨 Y좌표 앞뒤 판정 완벽 적용)
             const isBlockedByAlly = attacker.units.some(u => {
                 if (u.type !== 'T') return false; 
                 const isAlive = u.cells.length > (u.hitCells ? u.hitCells.length : 0);
-                return isAlive && u.cells.some(c => c % 20 === attackX); 
+                
+                // 조건 1: T블럭이 같은 사선(X열)에 있는가?
+                const sameX = u.cells.some(c => c % 20 === attackX); 
+                
+                // 조건 2: T블럭이 저격수보다 '앞쪽(Y값이 작음)'에 있는가?
+                // T블럭의 셀 중 하나라도 저격수(sniperY)보다 Y값이 작으면 사선을 가린 것!
+                const isTFrontOfSniper = u.cells.some(c => Math.floor(c / 20) < sniperY);
+
+                return isAlive && sameX && isTFrontOfSniper; 
             });
 
             if (isBlockedByAlly) return socket.emit('systemMsg', "저격 실패: 아군 ㅜ(T) 블럭에 시야가 가려져 있습니다.");
