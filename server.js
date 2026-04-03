@@ -9,6 +9,9 @@ const io = new Server(server);
 // 방 데이터 저장소
 const rooms = {};
 
+// 🚨 이미지, CSS 등 정적 파일을 유저에게 보낼 수 있도록 허용하는 통행증 코드!
+app.use(express.static(__dirname)); 
+
 app.get('/', (req, res) => {
     res.sendFile(__dirname + '/index.html');
 });
