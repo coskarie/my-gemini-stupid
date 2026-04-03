@@ -263,22 +263,37 @@ io.on('connection', (socket) => {
                 io.to(currentRoom).emit('gameOver', { winner: userName });
             } else {
                 if (hitType === 'T') {
-                    io.to(currentRoom).emit('systemMsg', "🛡️ ㅜ(T) 블럭 타격: 단단한 장갑에 튕겨 추가 공격 기회가 소멸되었습니다!");
-                    passTurn(room, opponent.id);
+                    // ✅ 수정: 저격(SNIPE)으로 T블럭을 맞췄을 때는 턴이 넘어가지 않음!
+                    if (type === 'SNIPE') {
+                        io.to(currentRoom).emit('systemMsg', "🛡️ ㅜ(T) 블럭 타격! (저격 능력이므로 턴이 유지됩니다.)");
+                        // passTurn 호출 안 함!
+                    } else {
+                        io.to(currentRoom).emit('systemMsg', "🛡️ ㅜ(T) 블럭 타격: 단단한 장갑에 튕겨 추가 공격 기회가 소멸되었습니다!");
+                        passTurn(room, opponent.id); // 일반 공격일 때만 턴 넘김
+                    }
                 }
             }
         } else {
-            room.phraseCount++;
-            io.to(currentRoom).emit('attackResult', { attacker: socket.id, attackIndex, targetIndex, hit: false, blocked: shieldBlocked, nextTurn: opponent.id });
-            passTurn(room, opponent.id);
+            // ✅ 수정: 저격(SNIPE)이 빗나가거나 방패에 막혔을 때 턴 유지!
+            if (type === 'SNIPE') {
+                // nextTurn을 내 id(socket.id)로 보내어 클라이언트 화면의 턴을 내 턴으로 유지
+                io.to(currentRoom).emit('attackResult', { attacker: socket.id, attackIndex, targetIndex, hit: false, blocked: shieldBlocked, nextTurn: socket.id });
+                socket.emit('systemMsg', "🔫 저격 완료! 추가 액션을 진행하세요.");
+                // passTurn 호출 안 함!
+            } else {
+                room.phraseCount++;
+                io.to(currentRoom).emit('attackResult', { attacker: socket.id, attackIndex, targetIndex, hit: false, blocked: shieldBlocked, nextTurn: opponent.id });
+                passTurn(room, opponent.id); // 일반 공격이 빗나갔을 때만 턴 넘김
 
-            if (room.phraseCount > 0 && room.phraseCount % 5 === 0) {
-                room.gameState = 'MOVING';
-                io.to(currentRoom).emit('startMoving');
-                io.to(currentRoom).emit('systemMsg', "⚠️ 5프레이즈 도달! 본대 유닛을 재배치하세요.");
+                // 프레이즈 체크는 일반 턴이 넘어갈 때만 카운트되도록 조정
+                if (room.phraseCount > 0 && room.phraseCount % 5 === 0) {
+                    room.gameState = 'MOVING';
+                    io.to(currentRoom).emit('startMoving');
+                    io.to(currentRoom).emit('systemMsg', "⚠️ 5프레이즈 도달! 본대 유닛을 재배치하세요.");
+                }
             }
         }
-    });
+    }); // socket.on('attack') 끝
 
     // 9. 기동함선(1x1) 이동 엔진 (🚨 대면 모드 레이더 업그레이드)
     socket.on('move1x1', (data) => {
