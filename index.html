@@ -383,7 +383,7 @@
                             style="width:100%; background:#2ecc71; color:#000; margin-top:10px; border:none; padding:10px; 
                                 font-family:'Rajdhani', sans-serif; font-weight:900; cursor:pointer; border-radius:4px;
                                 box-shadow: 0 0 10px rgba(46, 204, 113, 0.3); transition: 0.2s;">
-                        [?] DATA CENTER ACCESS
+                        [?] 게임 설명서 보기
                     </button>
                 </div>
             </div>
@@ -960,7 +960,12 @@
         }
         socket.on('receiveChat', d => {
             const l = document.getElementById('chat-log');
-            l.innerHTML += `<div><strong>${d.name}:</strong> ${d.msg}</div>`;
+            
+            l.innerHTML += `<div style="margin-bottom: 2px; line-height: 1.2;">
+                <strong style="color: #f87171;">${d.name}:</strong> 
+                <span style="color: #ffffff; margin-left: 5px;">${d.msg}</span>
+            </div>`;
+            
             l.scrollTop = l.scrollHeight;
         });
 
