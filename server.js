@@ -33,6 +33,8 @@ io.on('connection', (socket) => {
                 spectators: [], 
                 gameState: 'LOBBY',
                 phraseCount: 0,
+                turnCount: 0,   // 🚨 턴 카운터 추가
+                bonusBox: null, // 🚨 보급 상자 위치 (0~139) 추가
                 turn: null
             };
         }
@@ -100,10 +102,30 @@ io.on('connection', (socket) => {
     socket.on('finishPlacing', (units) => {
         const room = rooms[currentRoom];
         
+        // 1. 방 및 상태 체크
         if (!room || (room.gameState !== 'PLACING' && room.gameState !== 'MOVING')) return;
-        
+
         const player = room.players.find(p => p.id === socket.id);
         if (!player) return;
+
+        // 🚨 [추가] 보급 상자 겹침 체크 (P1/P2 거울 반전 계산 포함)
+        // 플레이어 1(방장)인지 확인하여 좌표 변환 기준을 잡습니다.
+        const isPlayer1 = (player.id === room.players[0].id);
+
+        if (room.bonusBox !== null) {
+            const overlapsWithBox = units.some(u => 
+                u.cells.some(c => {
+                    // 내 화면의 좌표 c를 서버의 절대 좌표(P1 기준)로 변환
+                    const absCell = isPlayer1 ? c : (139 - c);
+                    return absCell === room.bonusBox;
+                })
+            );
+
+            if (overlapsWithBox) {
+                // 겹치면 여기서 바로 리턴해서 아래 로직이 실행 안 되게 막습니다.
+                return socket.emit('systemMsg', "⚠️ 보급 상자가 있는 칸에는 유닛을 배치할 수 없습니다.");
+            }
+        }
 
         if (room.gameState === 'MOVING') {
             // ✅ 버그 수정 핵심 부분
@@ -354,6 +376,14 @@ io.on('connection', (socket) => {
 
         unit.cells = [to];
         player.fuel -= 2;
+
+        const absoluteTo = isPlayer1 ? to : (139 - to);
+        if (room.bonusBox !== null && absoluteTo === room.bonusBox) {
+            player.fuel += 4; // 연료 +4 획득
+            room.bonusBox = null; // 상자 제거
+            io.to(currentRoom).emit('systemMsg', `🎊 ${player.name} 지휘관이 보급 상자를 확보했습니다! (연료 +4⛽)`);
+        }
+
         socket.emit('updateFuel', { current: player.fuel, max: player.maxFuel });
         socket.emit('syncMovedUnit', { oldIdx: from, newIdx: to }); 
         socket.emit('systemMsg', "🏃 1x1 기동함선 이동 완료. (-2⛽)");
@@ -426,8 +456,35 @@ io.on('connection', (socket) => {
     // 🚨 턴 넘기기 유틸 함수 (연료 마이너스 통장 탈출 및 상자 보너스 적용!)
     function passTurn(room, nextTurnId) {
         room.turn = nextTurnId;
+        room.turnCount = (room.turnCount || 0) + 1; // 🚨 전체 턴 카운트 증가
         const nextPlayer = room.players.find(p => p.id === nextTurnId);
         
+        // 🚨 7턴마다 보급 상자 생성 로직
+        if (room.turnCount % 7 === 0) {
+            const occupiedCells = new Set();
+            room.players.forEach(p => {
+                p.units.forEach(u => {
+                    u.cells.forEach(c => {
+                        // 플레이어 2의 좌표는 1번 기준으로 변환해서 체크
+                        const cell = (p === room.players[0]) ? c : (139 - c);
+                        occupiedCells.add(cell);
+                    });
+                });
+            });
+
+            // 빈 칸 찾기 (최대 100번 시도)
+            let randomIdx;
+            for(let i=0; i<100; i++) {
+                randomIdx = Math.floor(Math.random() * 140);
+                if (!occupiedCells.has(randomIdx)) {
+                    room.bonusBox = randomIdx; // 보급 상자 위치 확정
+                    io.to(nextTurnId).parentElement; // 방 전체에 알림
+                    io.to(Object.keys(room.spectators).concat(room.players.map(p=>p.id))).emit('systemMsg', "🎁 전장에 보급 상자가 투하되었습니다! (7턴 보너스)");
+                    break;
+                }
+            }
+        }
+
         if (nextPlayer) {
             const aliveShips = nextPlayer.units.filter(u => u.type !== '📦' && u.cells.length > (u.hitCells ? u.hitCells.length : 0)).length;
             
