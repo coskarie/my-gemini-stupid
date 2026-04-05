@@ -549,9 +549,9 @@
             <div class="panel-bracket bracket-br"></div>
 
             <div class="name-label">
-                <span style="opacity:0.5;">● HOSTILE:</span> 
-                <span id="opp-name">CONNECTING...</span> 
-                <span id="opp-v" class="v-mark">[READY]</span>
+                <span id="opp-role" style="opacity:0.5;">● HOSTILE:</span> 
+                <span id="opp-name">대기 중</span> 
+                <span id="opp-v" class="v-mark" style="display: none;">[READY]</span>
             </div>
 
             <div class="grid-container-wrapper">
@@ -572,9 +572,9 @@
             </div>
             
             <div class="name-label">
-                <span style="opacity:0.5;">● COMMANDER:</span> 
-                <span id="my-name-display">-</span> 
-                <span id="my-v" class="v-mark">[READY]</span>
+                <span id="my-role" style="opacity:0.5;">● COMMANDER:</span> 
+                <span id="my-name-display">대기 중</span> 
+                <span id="my-v" class="v-mark" style="display: none;">[READY]</span>
             </div>
 
             <div style="display: flex; gap: 10px; align-items: center;">
@@ -1166,26 +1166,111 @@
             isPlayer = !!me; 
             gameStatus = data.gameState;
 
-            document.getElementById('my-v').style.display = (me && me.isReady) ? 'inline' : 'none';
-            if (opp) {
-                document.getElementById('opp-name').innerText = opp.name;
-                document.getElementById('opp-v').style.display = opp.isReady ? 'inline' : 'none';
-            } else {
-                document.getElementById('opp-name').innerText = "대기 중";
-                document.getElementById('opp-v').style.display = 'none';
+            // 🏷️ 이름표 DOM 가져오기
+            const myRole = document.getElementById('my-role');
+            const myNameDisplay = document.getElementById('my-name-display');
+            const myV = document.getElementById('my-v');
+            const oppRole = document.getElementById('opp-role');
+            const oppNameDisplay = document.getElementById('opp-name');
+            const oppV = document.getElementById('opp-v');
+
+            // 🌫️ 관전자는 전장의 안개를 걷어냄 (투시)
+            const fog = document.querySelector('.fogwrapper');
+            if (fog) fog.style.display = isPlayer ? 'block' : 'none';
+
+            // ⚔️ [1] 내가 플레이어일 때 (기존 로직)
+            if (isPlayer) {
+                myRole.innerText = "● COMMANDER:";
+                myNameDisplay.innerText = me.name;
+                myV.style.display = me.isReady ? 'inline' : 'none';
+
+                oppRole.innerText = "● HOSTILE:";
+                oppNameDisplay.innerText = opp ? opp.name : "대기 중";
+                oppV.style.display = (opp && opp.isReady) ? 'inline' : 'none';
+                
+                document.getElementById('action-panel').style.display = (gameStatus === 'PLAYING') ? 'flex' : 'none';
+            } 
+            // 👁️ [2] 내가 관전자일 때 (e스포츠 중계 모드)
+            else {
+                const p1 = data.players[0]; // 먼저 들어온 사람 (바닥)
+                const p2 = data.players[1]; // 늦게 들어온 사람 (상단)
+
+                myRole.innerText = "● PLAYER 1:";
+                myNameDisplay.innerText = p1 ? p1.name : "대기 중";
+                myV.style.display = (p1 && p1.isReady) ? 'inline' : 'none';
+
+                oppRole.innerText = "● PLAYER 2:";
+                oppNameDisplay.innerText = p2 ? p2.name : "대기 중";
+                oppV.style.display = (p2 && p2.isReady) ? 'inline' : 'none';
+                
+                // 관전자는 액션 패널과 인벤토리를 숨김
+                document.getElementById('action-panel').style.display = 'none';
+                document.getElementById('unit-inventory').style.display = 'none';
+                
+                // 🚨 게임 중이거나 종료 상태면 양쪽 유닛을 다 그려줌!
+                if (gameStatus === 'PLAYING' || gameStatus === 'ENDED') {
+                    renderSpectatorView(p1, p2);
+                }
             }
 
+            // 로비 버튼 제어
             if (data.gameState === 'LOBBY') {
                 btn.disabled = false;
                 if (data.players.length === 2 && data.players.every(p => p.isReady)) {
-                    btn.innerText = "게임 시작하기!"; btn.style.background = "#FF9800";
+                    btn.innerText = "SYSTEM START!"; btn.style.background = "#FF9800";
                 } else {
-                    btn.innerText = (me && me.isReady) ? "준비 취소" : "준비하기"; btn.style.background = "#4CAF50";
+                    if (isPlayer) {
+                        btn.innerText = me.isReady ? "CANCEL READY" : "SYSTEM READY"; 
+                        btn.style.background = me.isReady ? "#e74c3c" : "#2ecc71";
+                    } else {
+                        btn.innerText = "SPECTATING..."; btn.style.background = "#34495e"; btn.disabled = true;
+                    }
                 }
             }
+
             document.getElementById('player-list').innerText = "플레이어: " + data.players.map(p => p.name).join(', ');
             document.getElementById('spectator-list').innerText = "관전자: " + data.spectators.map(s => s.name).join(', ');
         });
+
+
+        // 👁️ [관전자 전용] 양쪽 플레이어의 유닛을 모두 그려주는 시스템
+        function renderSpectatorView(p1, p2) {
+            const myCells = document.getElementById('my-grid').children;
+            const oppCells = document.getElementById('opponent-grid').children;
+
+            // 1. 관전자 화면 싹 초기화 (흰색 껍데기 등 제거)
+            for(let i=0; i<140; i++) {
+                myCells[i].className = ''; myCells[i].style.opacity = "1";
+                oppCells[i].className = ''; oppCells[i].style.opacity = "1";
+            }
+
+            // 2. 바닥 플레이어(P1) 유닛 그리기
+            if (p1 && p1.units) {
+                p1.units.forEach(u => {
+                    u.cells.forEach(c => {
+                        if (c >= 0 && c < 140) {
+                            myCells[c].classList.add('my-unit');
+                            if (u.type === '📦') myCells[c].classList.add('box-unit');
+                            if (u.hitCells && u.hitCells.includes(c)) myCells[c].classList.add('hit-unit');
+                        }
+                    });
+                });
+            }
+
+            // 3. 상단 플레이어(P2) 유닛 그리기 (🚨 관전자 시점이므로 139 거울 반전 필수!)
+            if (p2 && p2.units) {
+                p2.units.forEach(u => {
+                    u.cells.forEach(c => {
+                        if (c >= 0 && c < 140) {
+                            let mirrorIdx = 139 - c; // 거울 반전
+                            oppCells[mirrorIdx].classList.add('my-unit');
+                            if (u.type === '📦') oppCells[mirrorIdx].classList.add('box-unit');
+                            if (u.hitCells && u.hitCells.includes(c)) oppCells[mirrorIdx].classList.add('hit-unit');
+                        }
+                    });
+                });
+            }
+        }
 
         function changeRole(r) { socket.emit('changeRole', r); }
 
@@ -1240,6 +1325,7 @@
         });
 
         socket.on('attackResult', data => {
+            if (!isPlayer) return; // 관전자는 공격 결과에 따른 격자판 업데이트나 턴 변경이 필요 없으므로 바로 리턴
             if (data.attacker === socket.id) {
                 // 1. 내가 공격했을 때: 막힌 게 아닐 때만 색칠함!
                 if (!data.blocked) {
@@ -1348,6 +1434,7 @@
         });
 
         socket.on('syncMovedUnit', data => {
+            if (!isPlayer) return; // 관전자는 굳이 이동된 유닛의 위치를 동기화할 필요가 없으므로 바로 리턴
             let unit = myUnits.find(u => u.type === '1x1' && u.cells.includes(data.oldIdx));
             if (unit) unit.cells = [data.newIdx];
             renderMyGrid();
