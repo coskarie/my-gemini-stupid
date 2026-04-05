@@ -328,7 +328,7 @@
             font-weight: 700; text-transform: uppercase; border-radius: 0px; cursor: pointer; transition: all 0.3s ease; }
         #start-btn { 
             background: rgba(46, 204, 113, 0.1); 
-            color: #2ecc71; 
+            color: #59ff00; 
             border: 1px solid #2ecc71; 
         }
         #start-btn:hover:not(:disabled) {
@@ -1190,7 +1190,9 @@
                 oppV.style.display = (opp && opp.isReady) ? 'inline' : 'none';
                 
                 document.getElementById('action-panel').style.display = (gameStatus === 'PLAYING') ? 'flex' : 'none';
+                document.getElementById('unit-inventory').style.display = 'flex';
             } 
+
             // 👁️ [2] 내가 관전자일 때 (e스포츠 중계 모드)
             else {
                 const p1 = data.players[0]; // 먼저 들어온 사람 (바닥)
@@ -1284,6 +1286,7 @@
             }
             document.getElementById('fuel-display').style.display = 'none';
             document.getElementById('action-panel').style.display = 'none';
+            document.getElementById('unit-inventory').style.display = 'flex';
             renderInventory(); renderMyGrid();
             const btn = document.getElementById('start-btn');
             btn.innerText = "배치 확정"; btn.style.background = "#2ecc71"; btn.disabled = false;
