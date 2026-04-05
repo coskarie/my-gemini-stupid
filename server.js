@@ -328,6 +328,7 @@ io.on('connection', (socket) => {
                 io.to(currentRoom).emit('systemMsg', "⚠️ 5프레이즈(10턴) 도달! 본대 유닛을 재배치하세요.");
             }
         }
+        updateRoomInfo(currentRoom);
     }); // socket.on('attack') 끝
 
     // 9. 기동함선(1x1) 이동 엔진 (🚨 대면 모드 레이더 업그레이드)
@@ -368,6 +369,7 @@ io.on('connection', (socket) => {
             // 🚨 currentRoom(방 전체) ➡️ opponent.id(레이더 주인) 에게만 귓속말 전송!
             io.to(opponent.id).emit('systemMsg', "📡 [레이더 경보] 적 기동함선의 움직임이 포착되었습니다!");
         }
+        updateRoomInfo(currentRoom);
     });
 
     // 7. 게임 종료 및 로비 초기화 로직
@@ -449,7 +451,7 @@ io.on('connection', (socket) => {
             }
         }
     }
-    
+
     function updateRoomInfo(roomCode) {
         if (rooms[roomCode]) {
             io.to(roomCode).emit('roomData', rooms[roomCode]);
