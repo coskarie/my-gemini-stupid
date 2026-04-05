@@ -273,17 +273,25 @@
 
         /* 1. 🧱 공통 뼈대 (크기, 격자 칸수, 테두리 등은 그대로 공유) */
         .grid { 
-            width: 95%; 
-            margin: 0 auto; 
-            height: 210px; 
+            width: 95%; margin: 0 auto; height: 210px; 
+            border: 2px solid #62ff00; 
             display: grid; 
             grid-template-columns: repeat(14, 1fr); 
-            grid-template-rows: repeat(10, 1fr);
-            flex-shrink: 0; /* 🚨 핵심: 어떤 일이 있어도 높이 210px을 양보하지 마라! */
+            grid-template-rows: repeat(10, 1fr); 
+            flex-shrink: 0;
+
+            /* 💡 마법의 주문: 테두리를 박스 크기 '안쪽'으로 계산하게 만듦 */
+            box-sizing: border-box; 
         }
 
         /* 2. 🎯 상대방 격자판 전용 (Grid1.jpg) */
         #opponent-grid {
+            position: absolute; /* 부모 래퍼를 기준으로 띄움 */
+            top: 0; left: 0; right: 0; bottom: 0; /* 상하좌우 여백 없이 쫙 폄 */
+            width: 100% !important; 
+            height: 100% !important;
+            margin: auto !important; /* 중앙 정렬 쐐기박기 */
+            
             background: linear-gradient(rgba(125, 125, 125, 0), rgba(0, 0, 0, 0)), 
                         url('Grid1.jpg') no-repeat center center;
             background-size: cover; 
@@ -345,7 +353,14 @@
         
         .chat-input-group { display: flex; gap: 5px; }
         .user-list-box { background: #000000; padding: 10px; border-radius: 5px; font-size: 0.9em; display: flex; flex-direction: column; gap: 5px; }
-        .my-turn-border { border: 4px solid #ff9800 !important; }
+        .my-turn-border { 
+            /* border를 4px로 바꾸면 격자 안쪽 공간이 줄어들어 칸이 찌그러집니다. 
+            두께는 2px로 유지하되, 레이아웃에 영향을 안 주는 'outline'과 '그림자'로 시각 효과만 극대화! */
+            border-color: #ff3333 !important; 
+            outline: 2px solid #ff3333 !important; /* 바깥쪽에 2px 선 추가 (레이아웃 안 밀림) */
+            outline-offset: 0px;
+            box-shadow: 0 0 15px rgba(255, 51, 51, 0.8), inset 0 0 10px rgba(255, 51, 51, 0.5) !important;
+        }
 
         .action-panel {display: none; gap: 10px; margin: 5px 0 15px 0; flex-shrink: 0; }
         .action-btn {flex: 1; padding: 10px; background: rgba(8, 0, 0, 0.8); border: 1px solid rgba(255, 255, 255, 0.15); color: rgba(255, 255, 255, 0.5);
