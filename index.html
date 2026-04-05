@@ -661,12 +661,13 @@
         let selectedUnitType = null; 
         let isPlayer = false; 
 
-        // 🚨 신규 변수: 액션 모드 및 기동함선 선택용
         let actionMode = 'ATTACK';
         let selected1x1Idx = -1; 
-
-        // 🚨 1번 규칙: 기동 단계에서 원래 위치를 저장할 변수 
         let movingOriginalState = null; 
+
+        let lastClickX = 0;
+        let lastClickY = 0;
+        let lastAttackType = 'ATTACK';
 
         const UNIT_SHAPES = {
             'ㄷ': [[0,0], [1,0], [0,1], [0,2], [1,2]],
@@ -698,7 +699,7 @@
             const oppGrid = document.getElementById('opponent-grid');
             const myGrid = document.getElementById('my-grid');
             oppGrid.innerHTML = ''; myGrid.innerHTML = '';
-            // 🚨 총 칸 수를 200에서 140으로 수정
+  
             for(let i=0; i<140; i++) {
                 const oCell = document.createElement('div');
                 
@@ -708,33 +709,27 @@
                         
                         const typeToEmit = actionMode; 
 
+                        // 🚨 1. 방금 클릭한 좌표와 공격 타입을 저장만 해둡니다. (아직 안 터짐!)
+                        lastClickX = e.clientX;
+                        lastClickY = e.clientY;
+                        lastAttackType = actionMode;
+
                         // 🎯 [저격 모드 전용 로직]
                         if (actionMode === 'SNIPE') {
                             if (!oCell.classList.contains('sniper-line')) {
                                 addGameLog("[차단] 저격은 가이드라인(하늘색)이 쳐진 X좌표만 공격할 수 있습니다!");
                                 return; 
                             }
-                            // 저격용 이펙트
-                            const hitX = e.clientX; const hitY = e.clientY;
-                            const hit = document.createElement('div');
-                            hit.className = 'hit'; hit.style.left = hitX + 'px'; hit.style.top = hitY + 'px';
-                            document.body.appendChild(hit); setTimeout(() => hit.remove(), 300);
-                            createParticles(hitX, hitY); // 저격용 파티클
-                            
                             renderSniperLines(false);
                             setActionMode('ATTACK'); 
                         } 
-                        // 💥 [일반 타격 모드 전용 로직 추가!]
-                        else if (actionMode === 'ATTACK') {
-                            // 일반 타격일 때는 형님이 만든 거친 폭발 이펙트를 호출합니다.
-                            createRoughExplosion(e.clientX, e.clientY);
-                        }
-
-                        // 서버로 공격 정보 발송
+                        
+                        // 🚀 2. 이펙트 없이 바로 서버로 공격 정보 발송 (심판 판정 대기)
                         socket.emit('attack', { index: i, type: typeToEmit }); 
                     }
                     else if(gameStatus === 'PLAYING' && !isMyTurn) addGameLog("[차단] 지금은 내 턴이 아닙니다.");
                 };
+
                 oppGrid.appendChild(oCell);
                 
                 const mCell = document.createElement('div');
@@ -1344,16 +1339,29 @@
             }
         });
 
+        // 🚨 플레이어 전용: 타격 결과 연출   
         socket.on('attackResult', data => {
-            if (!isPlayer) return; // 관전자는 공격 결과에 따른 격자판 업데이트나 턴 변경이 필요 없으므로 바로 리턴
+            if (!isPlayer) return; 
+            
             if (data.attacker === socket.id) {
-                // 1. 내가 공격했을 때: 막힌 게 아닐 때만 색칠함!
+                // 💥 [추가] 서버 판정이 도착한 '지금 이 순간' 폭발 이펙트를 터뜨립니다!
+                if (lastAttackType === 'ATTACK') {
+                    createRoughExplosion(lastClickX, lastClickY); // 거친 파편 폭발
+                } else if (lastAttackType === 'SNIPE') {
+                    // 저격용 이펙트
+                    const hit = document.createElement('div');
+                    hit.className = 'hit'; hit.style.left = lastClickX + 'px'; hit.style.top = lastClickY + 'px';
+                    document.body.appendChild(hit); setTimeout(() => hit.remove(), 300);
+                    createParticles(lastClickX, lastClickY);
+                }
+
+                // 🎨 타격 칸 색칠 (이펙트와 완벽하게 동시에 칠해짐)
                 if (!data.blocked) {
                     document.getElementById('opponent-grid').children[data.attackIndex].classList.add(data.hit ? 'hit-unit' : 'miss-cell');
                 }
                 addGameLog(`내 공격: ${data.hit ? "💥 적중!" : (data.blocked ? "🛡️ T블럭에 막아냄!" : "🌊 불발")}`);
             } else {
-                // 2. 내가 방어할 때: 막힌 게 아닐 때만 피격 판정
+                // 내가 방어할 때 로직 (기존과 동일)
                 if (!data.blocked) {
                     document.getElementById('my-grid').children[data.targetIndex].classList.add(data.hit ? 'hit-unit' : 'miss-cell');
                 }
