@@ -267,8 +267,12 @@
         .v-mark { color: #4CAF50; font-weight: 900; display: none; }
 
         .grid { 
-            width: 95%; margin: 0 auto; height: 210px; background: #02ff394e; border: 2px solid #62ff00; 
+            width: 95%; margin: 0 auto; height: 210px; background: #5c7d644e; border: 2px solid #62ff00; 
             display: grid; grid-template-columns: repeat(14, 1fr); grid-template-rows: repeat(10, 1fr); 
+            background: linear-gradient(rgba(125, 125, 125, 0.273), rgba(0, 0, 0, 0.7)), 
+                url('Grid.jpg') no-repeat center center;
+            background-size: cover; 
+            background-attachment: fixed;
         }
         .grid div { border: 0.1px solid #e0f5ff; cursor: pointer; box-sizing: border-box; }
         
@@ -308,6 +312,53 @@
         .moving-1x1 { box-shadow: 0 0 10px 3px #9b59b6 inset !important; } /* 선택된 1x1 유닛 시각 효과 */
         /* 🌟 네온 후광이 흘러가는 애니메이션 */
 
+
+        /* 🎯 [신규 추가] 저격 조준경 & 타격 이펙트 CSS */
+        #scope-layer {
+            position: fixed; pointer-events: none; display: none;
+            z-index: 4000; transform: translate(-50%, -50%);
+            width: 200vw; height: 200vh;
+            backdrop-filter: blur(10px) grayscale(1);
+            -webkit-mask-image: radial-gradient(circle 100px at center, transparent 100%, black 100%);
+            mask-image: radial-gradient(circle 100px at center, transparent 100%, black 100%);
+            -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+        }
+
+        #reticle {
+            position: fixed; top: 50%; left: 50%; width: 200px; height: 200px;
+            transform: translate(-50%, -50%); border: 2px solid #ff0000; border-radius: 50%;
+            pointer-events: none; display: none; z-index: 4001; box-shadow: 0 0 15px #ff0000;
+        }
+        #reticle::before {
+            content: ''; position: absolute; top: 50%; left: 50%; width: 100vw; height: 2px;
+            background: rgba(255, 0, 0, 0.6); box-shadow: 0 0 8px #ff0000; transform: translate(-50%, -50%);
+        }
+        #reticle::after {
+            content: ''; position: absolute; left: 50%; top: 50%; width: 2px; height: 100vh;
+            background: rgba(255, 0, 0, 0.6); box-shadow: 0 0 8px #ff0000; transform: translate(-50%, -50%);
+        }
+        #center-dot {
+            position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; background: #ff0000;
+            border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 10px #ff0000; z-index: 4002;
+        }
+
+        /* 타격 및 파티클 이펙트 */
+        .hit {
+            position: absolute; width: 100px; height: 100px;
+            background: radial-gradient(circle, #fff, #ff0000, transparent);
+            border-radius: 50%; transform: translate(-50%, -50%);
+            animation: bang 0.3s forwards; z-index: 4003; pointer-events: none;
+        }
+        @keyframes bang { from { transform: translate(-50%, -50%) scale(0); opacity: 1; } to { transform: translate(-50%, -50%) scale(2); opacity: 0; } }
+
+        .particle {
+            position: absolute; background: #ff0000; border-radius: 50%;
+            pointer-events: none; z-index: 4004; animation: fly 0.6s ease-out forwards;
+        }
+        @keyframes fly {
+            0% { transform: translate(-50%, -50%) translate(0, 0) scale(1); opacity: 1; }
+            100% { transform: translate(-50%, -50%) translate(var(--tx), var(--ty)) scale(0); opacity: 0; }
+        }
     </style>
 </head>
 <body>
@@ -358,7 +409,7 @@
             </div>
             <div id="my-grid" class="grid" onmouseleave="clearGhost()"></div>
             <div id="unit-inventory" class="inventory"></div>
-            <div id="phrase-display" style="font-size: 1.05em; font-weight: bold; color: #34495e; margin-top: 5px; margin-left: 5px;">[ 1 프레이즈 ]</div>
+            <div id="phrase-display" style="font-size: 1.05em; font-weight: bold; color: #22ff05; margin-top: 5px; margin-left: 5px;">[ 1 프레이즈 ]</div>
         </div>
 
         <div class="right-panel">
@@ -409,6 +460,8 @@
                 </div>
             </div>
         </div>
+        <div id="scope-layer"></div>
+            <div id="reticle"><div id="center-dot"></div></div>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
@@ -460,13 +513,34 @@
             // 🚨 총 칸 수를 200에서 140으로 수정
             for(let i=0; i<140; i++) {
                 const oCell = document.createElement('div');
-                oCell.onclick = function() { 
+                
+                // 💡 [수정됨] 마우스 좌표를 읽기 위해 function(e)로 바꿨습니다.
+                oCell.onclick = function(e) { 
                     if(gameStatus === 'PLAYING' && isMyTurn) {
                         if (actionMode === 'MOVE') return alert("🏃 기동 모드입니다. 내 격자판의 1x1 함선을 클릭하세요.");
                         
-                        // 🚨 사격(클릭)하는 순간 하늘색 가이드라인 즉시 제거!
+                        // 🎯 [수정됨] 저격 모드일 때 이펙트 터뜨리기
                         if (actionMode === 'SNIPE') {
+                            // 마우스 클릭 좌표 따오기
+                            const hitX = e.clientX;
+                            const hitY = e.clientY;
+                            
+                            // 1. 번쩍이는 원형 이펙트 생성
+                            const hit = document.createElement('div');
+                            hit.className = 'hit';
+                            hit.style.left = hitX + 'px';
+                            hit.style.top = hitY + 'px';
+                            document.body.appendChild(hit);
+                            setTimeout(() => hit.remove(), 300);
+
+                            // 2. 파편 튀는 이펙트 생성 (createParticles 함수 호출)
+                            createParticles(hitX, hitY);
+
+                            // 3. 기존: 사격 순간 가이드라인 제거
                             renderSniperLines(false);
+                            
+                            // 4. 연사 방지: 한 발 쏘면 기본 타격 모드로 강제 복귀
+                            setActionMode('ATTACK'); 
                         }
 
                         // 서버로 공격 명령
@@ -479,7 +553,7 @@
                 const mCell = document.createElement('div');
                 mCell.onmouseenter = function() { showGhost(i); };
                 mCell.onclick = function() { 
-                    // 🚨 내 턴이고 기동(MOVE) 모드일 때는 1x1 선택 및 이동 로직으로 빠짐
+                    // 내 턴이고 기동(MOVE) 모드일 때는 1x1 선택 및 이동 로직으로 빠짐
                     if(gameStatus === 'PLAYING' && isMyTurn && actionMode === 'MOVE') {
                         handleMove1x1Click(i);
                     } else {
@@ -511,6 +585,13 @@
             renderMyGrid();
             // 🚨 모드가 바뀔 때 저격(SNIPE)이면 라인 켜고, 아니면 끄기
             renderSniperLines(mode === 'SNIPE');
+            
+            const scopeLayer = document.getElementById('scope-layer');
+            const reticleLayer = document.getElementById('reticle');
+            if (scopeLayer && reticleLayer) {
+                scopeLayer.style.display = (mode === 'SNIPE') ? 'block' : 'none';
+                reticleLayer.style.display = (mode === 'SNIPE') ? 'block' : 'none';
+            }
         }
 
         // 🚨 신규 함수: 기동함선(1x1) 클릭 및 이동 로직 (클라이언트 1차 필터링)
@@ -539,6 +620,38 @@
                 socket.emit('move1x1', { from: selected1x1Idx, to: idx });
                 selected1x1Idx = -1; // 요청 후 선택 해제
                 renderMyGrid();
+            }
+        }
+
+        // 🎯 마우스 추적: 저격 모드일 때만 마우스를 따라다님
+        window.addEventListener('mousemove', (e) => {
+            if (actionMode !== 'SNIPE') return;
+            const scopeLayer = document.getElementById('scope-layer');
+            const reticleLayer = document.getElementById('reticle');
+            if(scopeLayer && reticleLayer) {
+                scopeLayer.style.left = e.clientX + 'px';
+                scopeLayer.style.top = e.clientY + 'px';
+                reticleLayer.style.left = e.clientX + 'px';
+                reticleLayer.style.top = e.clientY + 'px';
+            }
+        });
+
+        // 💥 파편 생성 함수
+        function createParticles(x, y) {
+            const count = 15;
+            for (let i = 0; i < count; i++) {
+                const p = document.createElement('div');
+                p.className = 'particle';
+                const angle = Math.random() * Math.PI * 2;
+                const dist = Math.random() * 100 + 50;
+                p.style.setProperty('--tx', `${Math.cos(angle) * dist}px`);
+                p.style.setProperty('--ty', `${Math.sin(angle) * dist}px`);
+                p.style.left = x + 'px';
+                p.style.top = y + 'px';
+                p.style.width = p.style.height = (Math.random() * 4 + 2) + 'px';
+                
+                document.body.appendChild(p); // 격자에 짤리지 않게 body에 추가
+                setTimeout(() => p.remove(), 600);
             }
         }
 
